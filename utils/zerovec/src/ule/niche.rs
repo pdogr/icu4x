@@ -141,7 +141,7 @@ unsafe impl<U: NicheBytes<N> + ULE, const N: usize> ULE for NichedOptionULE<U, N
 /// Derefs to [`Option<U>`]
 /// The implementors guarantee that N == core::mem::sizeo_of::<Self>()
 /// [`repr(transparent)`] guarantees that the layout is same as [`Option<U>`]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 #[non_exhaustive]
 pub struct NichedOption<U, const N: usize>(pub Option<U>);

@@ -41,7 +41,7 @@ macro_rules! langid {
             match $crate::LanguageIdentifier::from_bytes_with_single_variant($langid.as_bytes()) {
                 Ok((language, script, region, variant)) => $crate::LanguageIdentifier {
                     language,
-                    script,
+                    script: $crate::LanguageIdentifier::make_script(script),
                     region,
                     variants: match variant {
                         Some(v) => $crate::subtags::Variants::from_variant(v),
@@ -121,7 +121,7 @@ macro_rules! locale {
                 Ok((language, script, region, variant, keyword)) => $crate::Locale {
                     id: $crate::LanguageIdentifier {
                         language,
-                        script,
+                        script: $crate::LanguageIdentifier::make_script(script),
                         region,
                         variants: match variant {
                             Some(v) => $crate::subtags::Variants::from_variant(v),

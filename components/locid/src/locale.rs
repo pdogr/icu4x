@@ -34,7 +34,7 @@ use tinystr::TinyAsciiStr;
 /// let loc: Locale = "en-US-u-ca-buddhist".parse().expect("Failed to parse.");
 ///
 /// assert_eq!(loc.id.language, "en".parse::<Language>().unwrap());
-/// assert_eq!(loc.id.script, None);
+/// assert_eq!(loc.id.get_script(), None);
 /// assert_eq!(loc.id.region, "US".parse::<Region>().ok());
 /// assert_eq!(loc.id.variants.len(), 0);
 /// assert_eq!(loc.to_string(), "en-US-u-ca-buddhist");
@@ -68,7 +68,7 @@ use tinystr::TinyAsciiStr;
 ///     .expect("Failed to parse.");
 ///
 /// assert_eq!(loc.id.language, "en".parse::<Language>().unwrap());
-/// assert_eq!(loc.id.script, "Latn".parse::<Script>().ok());
+/// assert_eq!(loc.id.get_script(), "Latn".parse::<Script>().ok());
 /// assert_eq!(loc.id.region, "US".parse::<Region>().ok());
 /// assert_eq!(loc.id.variants.get(0), "valencia".parse::<Variant>().ok().as_ref());
 /// ```
@@ -285,7 +285,7 @@ impl Locale {
         if !subtag_matches!(subtags::Language, iter, self.id.language) {
             return false;
         }
-        if let Some(ref script) = self.id.script {
+        if let Some(ref script) = self.id.get_script() {
             if !subtag_matches!(subtags::Script, iter, *script) {
                 return false;
             }

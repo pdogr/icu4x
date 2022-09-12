@@ -45,6 +45,10 @@ impl<const N: usize> AsULE for TinyAsciiStr<N> {
     }
 }
 
+impl<const N: usize> NicheBytes<N> for TinyAsciiStr<N> {
+    const NICHE_BIT_PATTERN: [u8; N] = [0xff; N];
+}
+
 impl<'a, const N: usize> ZeroMapKV<'a> for TinyAsciiStr<N> {
     type Container = ZeroVec<'a, TinyAsciiStr<N>>;
     type Slice = ZeroSlice<TinyAsciiStr<N>>;

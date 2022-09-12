@@ -59,7 +59,7 @@ impl From<&cldr_serde::likely_subtags::Resource> for LikelySubtagsV1<'static> {
                             Language::UND
                         },
                         if entry.0.script != entry.1.script {
-                            entry.1.script
+                            entry.1.get_script()
                         } else {
                             None
                         },
@@ -83,14 +83,14 @@ impl From<&cldr_serde::likely_subtags::Resource> for LikelySubtagsV1<'static> {
 
             if !entry.0.language.is_empty() {
                 let lang = entry.0.language;
-                if let Some(script) = entry.0.script {
+                if let Some(script) = entry.0.get_script() {
                     with_diff!((Language::UND, None, Some(region)) => language_script.insert(&(lang.into(), script.into()), &region));
                 } else if let Some(region) = entry.0.region {
                     with_diff!((Language::UND, Some(script), None) => language_region.insert(&(lang.into(), region.into()), &script));
                 } else {
                     with_diff!((Language::UND, Some(script), Some(region)) => language.insert(&lang.into(), &(script, region)));
                 }
-            } else if let Some(scr) = entry.0.script {
+            } else if let Some(scr) = entry.0.get_script() {
                 if let Some(region) = entry.0.region {
                     with_diff!((language, None, None) => script_region.insert(&(scr.into(), region.into()), &language));
                 } else {

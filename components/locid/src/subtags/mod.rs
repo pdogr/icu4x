@@ -49,6 +49,6 @@ mod variants;
 
 pub use language::Language;
 pub use region::Region;
-pub use script::Script;
+pub use script::{Script, SCRIPT_LENGTH};
 pub use variant::Variant;
 pub use variants::Variants;

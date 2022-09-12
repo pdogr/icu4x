@@ -164,7 +164,7 @@ pub mod ffi {
             &self,
             write: &mut diplomat_runtime::DiplomatWriteable,
         ) -> DiplomatResult<(), ICU4XError> {
-            if let Some(script) = self.0.id.script {
+            if let Some(script) = self.0.id.get_script() {
                 #[allow(unused_variables)]
                 let result = script.write_to(write).map_err(Into::into).into();
                 write.flush();
@@ -178,12 +178,12 @@ pub mod ffi {
         #[diplomat::rust_link(icu::locid::Locale::from_bytes, FnInStruct)]
         pub fn set_script(&mut self, bytes: &str) -> DiplomatResult<(), ICU4XError> {
             if bytes.is_empty() {
-                self.0.id.script = None;
+                self.0.id.set_script(None);
                 return Ok(()).into();
             }
             match Script::from_bytes(bytes.as_bytes()) {
                 Ok(script) => {
-                    self.0.id.script = Some(script);
+                    self.0.id.set_script(Some(script));
                     Ok(())
                 }
                 Err(e) => Err(e.into()),

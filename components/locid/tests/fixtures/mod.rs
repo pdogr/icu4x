@@ -197,7 +197,7 @@ impl TryFrom<LocaleSubtags> for LanguageIdentifier {
             .collect::<Vec<_>>();
         Ok(LanguageIdentifier {
             language,
-            script,
+            script: LanguageIdentifier::make_script(script),
             region,
             variants: subtags::Variants::from_vec_unchecked(variants),
         })
@@ -232,7 +232,7 @@ impl TryFrom<LocaleSubtags> for Locale {
         Ok(Locale {
             id: LanguageIdentifier {
                 language,
-                script,
+                script: LanguageIdentifier::make_script(script),
                 region,
                 variants: subtags::Variants::from_vec_unchecked(variants),
             },

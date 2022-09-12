@@ -14,6 +14,12 @@ use crate::subtags;
 use alloc::string::String;
 use alloc::string::ToString;
 
+#[cfg(feature = "zerovec")]
+use zerovec::ule::NichedOption;
+
+#[cfg(not(feature = "zerovec"))]
+type NichedOption<U, const N: usize> = Option<U>;
+
 /// A core struct representing a [`Unicode BCP47 Language Identifier`].
 ///
 /// # Examples
@@ -24,7 +30,7 @@ use alloc::string::ToString;
 /// let li: LanguageIdentifier = "en-US".parse().expect("Failed to parse.");
 ///
 /// assert_eq!(li.language, "en".parse::<Language>().unwrap());
-/// assert_eq!(li.script, None);
+/// assert_eq!(li.get_script(), None);
 /// assert_eq!(li.region.unwrap(), "US".parse::<Region>().unwrap());
 /// assert_eq!(li.variants.len(), 0);
 /// assert_eq!(li.to_string(), "en-US");
@@ -52,7 +58,7 @@ use alloc::string::ToString;
 /// let li: LanguageIdentifier = "eN_latn_Us-Valencia".parse().expect("Failed to parse.");
 ///
 /// assert_eq!(li.language, "en".parse::<Language>().unwrap());
-/// assert_eq!(li.script, "Latn".parse::<Script>().ok());
+/// assert_eq!(li.get_script(), "Latn".parse::<Script>().ok());
 /// assert_eq!(li.region, "US".parse::<Region>().ok());
 /// assert_eq!(li.variants.get(0), "valencia".parse::<Variant>().ok().as_ref());
 /// ```
@@ -64,7 +70,7 @@ pub struct LanguageIdentifier {
     /// Language subtag of the language identifier.
     pub language: subtags::Language,
     /// Script subtag of the language identifier.
-    pub script: Option<subtags::Script>,
+    pub script: NichedOption<subtags::Script, { subtags::SCRIPT_LENGTH }>,
     /// Region subtag of the language identifier.
     pub region: Option<subtags::Region>,
     /// Variant subtags of the language identifier.
@@ -137,10 +143,60 @@ impl LanguageIdentifier {
     /// ```
     pub const UND: Self = Self {
         language: subtags::Language::UND,
-        script: None,
+        script: {
+            #[cfg(feature = "zerovec")]
+            {
+                NichedOption::new(None)
+            }
+            #[cfg(not(feature = "zerovec"))]
+            {
+                None
+            }
+        },
         region: None,
         variants: subtags::Variants::new(),
     };
+
+    /// Get script as Option
+    #[inline]
+    pub const fn get_script(&self) -> Option<subtags::Script> {
+        #[cfg(feature = "zerovec")]
+        {
+            self.script.0
+        }
+        #[cfg(not(feature = "zerovec"))]
+        {
+            self.script
+        }
+    }
+
+    ///
+    #[inline]
+    pub fn set_script(&mut self, script: Option<subtags::Script>) {
+        #[cfg(feature = "zerovec")]
+        {
+            self.script = NichedOption::new(script);
+        }
+        #[cfg(not(feature = "zerovec"))]
+        {
+            self.script = script;
+        }
+    }
+
+    ///
+    #[inline]
+    pub const fn make_script(
+        script: Option<subtags::Script>,
+    ) -> NichedOption<subtags::Script, { subtags::SCRIPT_LENGTH }> {
+        #[cfg(feature = "zerovec")]
+        {
+            NichedOption::new(script)
+        }
+        #[cfg(not(feature = "zerovec"))]
+        {
+            script
+        }
+    }
 
     /// This is a best-effort operation that performs all available levels of canonicalization.
     ///
@@ -291,7 +347,7 @@ impl LanguageIdentifier {
         if !subtag_matches!(subtags::Language, iter, self.language) {
             return false;
         }
-        if let Some(ref script) = self.script {
+        if let Some(ref script) = self.get_script() {
             if !subtag_matches!(subtags::Script, iter, *script) {
                 return false;
             }
@@ -314,7 +370,7 @@ impl LanguageIdentifier {
         F: FnMut(&str) -> Result<(), E>,
     {
         f(self.language.as_str())?;
-        if let Some(ref script) = self.script {
+        if let Some(ref script) = self.get_script() {
             f(script.as_str())?;
         }
         if let Some(ref region) = self.region {
@@ -414,7 +470,7 @@ impl From<subtags::Language> for LanguageIdentifier {
 impl From<Option<subtags::Script>> for LanguageIdentifier {
     fn from(script: Option<subtags::Script>) -> Self {
         Self {
-            script,
+            script: script.into(),
             ..Default::default()
         }
     }
@@ -476,7 +532,7 @@ impl
     ) -> Self {
         Self {
             language: lsr.0,
-            script: lsr.1,
+            script: lsr.1.into(),
             region: lsr.2,
             ..Default::default()
         }
@@ -506,6 +562,6 @@ impl From<&LanguageIdentifier>
     )
 {
     fn from(langid: &LanguageIdentifier) -> Self {
-        (langid.language, langid.script, langid.region)
+        (langid.language, langid.get_script(), langid.region)
     }
 }

@@ -31,7 +31,7 @@
 //! let region: Region = "US".parse().expect("Parsing failed.");
 //!
 //! assert_eq!(loc.id.language, lang);
-//! assert_eq!(loc.id.script, None);
+//! assert_eq!(loc.id.get_script(), None);
 //! assert_eq!(loc.id.region, Some(region));
 //! assert_eq!(loc.id.variants.len(), 0);
 //!

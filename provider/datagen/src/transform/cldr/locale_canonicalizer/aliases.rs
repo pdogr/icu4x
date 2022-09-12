@@ -99,7 +99,7 @@ impl From<&cldr_serde::aliases::Resource> for AliasesV1<'_> {
                 if let Ok(replacement) = to.replacement.parse::<LanguageIdentifier>() {
                     match (
                         langid.language,
-                        langid.script,
+                        langid.get_script(),
                         langid.region,
                         !langid.variants.is_empty(),
                     ) {

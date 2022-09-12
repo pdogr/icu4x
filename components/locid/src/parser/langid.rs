@@ -93,7 +93,7 @@ pub fn parse_language_identifier_from_iter(
 
     Ok(LanguageIdentifier {
         language,
-        script,
+        script: script.into(),
         region,
         variants: subtags::Variants::from_vec_unchecked(variants),
     })

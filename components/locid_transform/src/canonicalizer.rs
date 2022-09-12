@@ -63,7 +63,7 @@ where
     I: Iterator<Item = &'a str>,
 {
     (language.is_empty() || language == source.id.language)
-        && (script.is_none() || script == source.id.script)
+        && (script.is_none() || script == *source.id.script)
         && (region.is_none() || region == source.id.region)
         && {
             // Checks if variants are a subset of source variants.
@@ -306,7 +306,7 @@ impl LocaleCanonicalizer {
                         if uts35_rule_matches(
                             locale,
                             from.language,
-                            from.script,
+                            *from.script,
                             from.region,
                             from.variants.iter().map(Variant::as_str),
                         ) {
@@ -352,9 +352,9 @@ impl LocaleCanonicalizer {
                 }
             }
 
-            if let Some(script) = locale.id.script {
+            if let Some(script) = locale.id.get_script() {
                 if let Some(&replacement) = self.aliases.get().script.get(&script.into()) {
-                    locale.id.script = Some(replacement);
+                    locale.id.set_script(Some(replacement));
                     result = TransformResult::Modified;
                     continue;
                 }
@@ -483,7 +483,7 @@ fn test_uts35_rule_matches() {
             uts35_rule_matches(
                 &source,
                 rule.language,
-                rule.script,
+                rule.get_script(),
                 rule.region,
                 rule.variants.iter().map(Variant::as_str),
             ),

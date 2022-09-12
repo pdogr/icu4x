@@ -76,7 +76,7 @@ fn update_langid(
     }
 
     if langid.script.is_none() && script.is_some() {
-        langid.script = script;
+        langid.set_script(script);
         modified = true;
     }
 
@@ -151,7 +151,7 @@ impl LocaleExpander {
                     return update_langid(Language::UND, Some(script), None, langid);
                 }
             }
-            if let Some(script) = langid.script {
+            if let Some(script) = langid.get_script() {
                 if let Some(region) = data
                     .language_script
                     .get(&(langid.language.into(), script.into()))
@@ -168,7 +168,7 @@ impl LocaleExpander {
                 return update_langid(Language::UND, Some(script), Some(region), langid);
             }
         }
-        if let Some(script) = langid.script {
+        if let Some(script) = langid.get_script() {
             if let Some(region) = langid.region {
                 if let Some(language) = data
                     .script_region
@@ -235,7 +235,7 @@ impl LocaleExpander {
         max.variants.clear();
         let mut trial = max.clone();
 
-        trial.script = None;
+        trial.set_script(None);
         trial.region = None;
         self.maximize(&mut trial);
         if trial == max {
@@ -245,7 +245,7 @@ impl LocaleExpander {
                     langid.language = max.language
                 }
                 if langid.script.is_some() {
-                    langid.script = None;
+                    langid.set_script(None);
                 }
                 if langid.region.is_some() {
                     langid.region = None;
@@ -257,7 +257,7 @@ impl LocaleExpander {
             }
         }
 
-        trial.script = None;
+        trial.set_script(None);
         trial.region = max.region;
         self.maximize(&mut trial);
         if trial == max {
@@ -269,7 +269,7 @@ impl LocaleExpander {
                     langid.language = max.language
                 }
                 if langid.script.is_some() {
-                    langid.script = None;
+                    langid.set_script(None);
                 }
                 if langid.region != max.region {
                     langid.region = max.region;

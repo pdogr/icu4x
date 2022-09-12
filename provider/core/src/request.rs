@@ -344,13 +344,13 @@ impl DataLocale {
     /// Returns the [`Script`] for this [`DataLocale`].
     #[inline]
     pub fn script(&self) -> Option<Script> {
-        self.langid.script
+        self.langid.get_script()
     }
 
     /// Sets the [`Script`] for this [`DataLocale`].
     #[inline]
     pub fn set_script(&mut self, script: Option<Script>) {
-        self.langid.script = script;
+        self.langid.set_script(script);
     }
 
     /// Returns the [`Region`] for this [`DataLocale`].
