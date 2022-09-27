@@ -47,6 +47,12 @@ rand_distr = "0.4"
 getrandom = { version = "0.2", features = ["js"] }
 yoke = { version = "0.6.0", path = "../yoke", features = ["derive"] }
 zerofrom = { version = "0.1.0", path = "../zerofrom", features = ["derive"] }
+paste = { version = "1.0" }
+t1ha = { version = "0.1" }
+fxhash = { version = "0.2.1" }
+highway = { version = "0.8.0" }
+xxhash-rust = { version = "0.8.6", features = ["xxh3", "xxh64"]}
+seahash = { version = "4.1.0" }
 
 [features]
 bench = []
@@ -75,6 +81,11 @@ harness = false
 name = "zeromap"
 harness = false
 required-features = ["serde"]
+
+[[bench]]
+name = "zerohashmap"
+harness = false
+required-features = ["serde", "hashmap"]
 
 [[example]]
 name = "zv_serde"

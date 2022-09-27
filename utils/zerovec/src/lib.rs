@@ -232,7 +232,7 @@ mod zerofrom_impls;
 pub use crate::error::ZeroVecError;
 pub use crate::map::map::ZeroMap;
 #[cfg(feature = "hashmap")]
-pub use crate::map::ZeroHashMapStatic;
+pub use crate::map::{HashFn, PAZeroHashMapStatic, Split3Fn};
 pub use crate::map2d::map::ZeroMap2d;
 pub use crate::varzerovec::{slice::VarZeroSlice, vec::VarZeroVec};
 pub use crate::zerovec::{ZeroSlice, ZeroVec};

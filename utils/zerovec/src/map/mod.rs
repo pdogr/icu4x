@@ -22,6 +22,6 @@ mod serde_helpers;
 pub use crate::ZeroMap;
 pub use borrowed::ZeroMapBorrowed;
 #[cfg(feature = "hashmap")]
-pub use hashmap::ZeroHashMapStatic;
+pub use hashmap::{HashFn, PAZeroHashMapStatic, Split3Fn};
 pub use kv::ZeroMapKV;
 pub use vecs::{MutableZeroVecLike, ZeroVecLike};
