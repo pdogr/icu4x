@@ -19,7 +19,7 @@ use paste::paste;
 use wyhash::WyHash;
 use zerovec::maps::ZeroMapKV;
 use zerovec::vecs::{Index32, VarZeroSlice, VarZeroVec};
-use zerovec::{HashFn, PAZeroHashMapStatic, Split3Fn};
+use zerovec::{GAZeroHashMapStatic, HashFn, HashFnWithSeed, PAZeroHashMapStatic, Split3Fn};
 
 const DATA: [(&str, &str); 16] = [
     ("ar", "Arabic"),
@@ -39,6 +39,7 @@ const DATA: [(&str, &str); 16] = [
     ("tr", "Turkish"),
     ("zh", "Chinese"),
 ];
+
 /*
 /// Run this function to print new data to the console. Requires the optional `serde` feature.
 #[allow(dead_code)]
@@ -82,10 +83,74 @@ fn sanity_test(
     }
 }
 
-macro_rules! lookup_benchmark_pa {
-    ($name: ident, $hash_fn: ident, $split_fn: ident) => {
+macro_rules! lookup_benchmark_ga {
+    ($hash_fn: ident) => {
         paste! {
-            fn [<$hash_fn _ $split_fn _lookup_small>](c: &mut Criterion) {
+            fn [<ga_ $hash_fn _lookup_small>](c: &mut Criterion) {
+                let kv = black_box(build_data(false));
+                let hm:GAZeroHashMapStatic<Index32Str,Index32Str> =
+                    GAZeroHashMapStatic::build_from_iter(
+                        kv.iter().map(|kv| (indexify(&kv.0), indexify(&kv.1))),
+                        $hash_fn
+                    );
+                for (k, v) in kv.iter() {
+                    assert_eq!(
+                        hm.get(indexify(k), $hash_fn).map(|x| &x.0),
+                        Some(v.as_ref())
+                    );
+                }
+                c.bench_function(concat!("zhm/lookup/small/ga/", stringify!($hash_fn)),
+                    |b| {
+                        b.iter(|| {
+                            assert_eq!(
+                                hm.get(black_box(indexify("iu")), $hash_fn).map(|x| &x.0),
+                                Some("Inuktitut")
+                            );
+                            assert_eq!(
+                                hm.get(black_box(indexify("zz")),
+                                $hash_fn).map(|x| &x.0),
+                                None
+                            );
+                        });
+                    });
+            }
+
+            fn [<ga_ $hash_fn  _lookup_large>](c: &mut Criterion) {
+                let kv = black_box(build_data(true));
+                let hm:GAZeroHashMapStatic<Index32Str,Index32Str> =
+                    GAZeroHashMapStatic::build_from_iter(
+                        kv.iter().map(|kv| (indexify(&kv.0), indexify(&kv.1))),
+                        $hash_fn
+                    );
+                for (k, v) in kv.iter() {
+                    assert_eq!(
+                        hm.get(indexify(k), $hash_fn).map(|x| &x.0),
+                        Some(v.as_ref())
+                    );
+                }
+                c.bench_function(concat!("zhm/lookup/large/ga/",stringify!($hash_fn)),
+                    |b| {
+                        b.iter(|| {
+                            assert_eq!(
+                                hm.get(black_box(indexify("iu3333")), $hash_fn).map(|x| &x.0),
+                                Some("Inuktitut")
+                            );
+                            assert_eq!(
+                                hm.get(black_box(indexify("zz")),
+                                $hash_fn).map(|x| &x.0),
+                                None
+                            );
+                        });
+                    });
+            }
+        }
+    };
+}
+
+macro_rules! lookup_benchmark_pa {
+    ($hash_fn: ident, $split_fn: ident) => {
+        paste! {
+            fn [<pa_ $hash_fn _ $split_fn _lookup_small>](c: &mut Criterion) {
                 let kv = black_box(build_data(false));
                 let hm:PAZeroHashMapStatic<Index32Str,Index32Str> =
                     PAZeroHashMapStatic::build_from_iter(
@@ -94,7 +159,7 @@ macro_rules! lookup_benchmark_pa {
                         $hash_fn
                     );
                 sanity_test(&kv, &hm, $split_fn, $hash_fn);
-                c.bench_function(concat!("zhms/lookup/small/",stringify!($split_fn),"/", stringify!($hash_fn)),
+                c.bench_function(concat!("zhm/lookup/small/pa/",stringify!($split_fn),"/", stringify!($hash_fn)),
                     |b| {
                         b.iter(|| {
                             assert_eq!(
@@ -110,7 +175,8 @@ macro_rules! lookup_benchmark_pa {
                         });
                     });
             }
-            fn [<$hash_fn _ $split_fn _lookup_large>](c: &mut Criterion) {
+
+            fn [<pa_ $hash_fn _ $split_fn _lookup_large>](c: &mut Criterion) {
                 let kv = black_box(build_data(true));
                 let hm:PAZeroHashMapStatic<Index32Str,Index32Str> =
                     PAZeroHashMapStatic::build_from_iter(
@@ -119,7 +185,7 @@ macro_rules! lookup_benchmark_pa {
                         $hash_fn
                     );
                 sanity_test(&kv, &hm, $split_fn, $hash_fn);
-                c.bench_function(concat!("zhms/lookup/large/",stringify!($split_fn),"/", stringify!($hash_fn)),
+                c.bench_function(concat!("zhm/lookup/large/pa/",stringify!($split_fn),"/", stringify!($hash_fn)),
                     |b| {
                         b.iter(|| {
                             assert_eq!(
@@ -139,7 +205,7 @@ macro_rules! lookup_benchmark_pa {
     };
 }
 
-const S_16_24_24: Split3Fn = |hash: u64, m: u32| {
+const SplitD: Split3Fn = |hash: u64, m: u32| {
     (
         ((hash >> 48) as u32 % m) as usize,
         (hash >> 24) as u32 & 0xffffff,
@@ -147,55 +213,64 @@ const S_16_24_24: Split3Fn = |hash: u64, m: u32| {
     )
 };
 
-const wyhash: HashFn<Index32Str> = |k: &Index32Str| -> u64 {
-    let mut hasher = WyHash::with_seed(0);
+const wyhash: HashFn<Index32Str> = |k: &Index32Str| -> u64 { wyhash_seed(k, 0x00) };
+const t1ha: HashFn<Index32Str> = |k: &Index32Str| -> u64 { t1ha_seed(k, 0) };
+const fxhash: HashFn<Index32Str> = |k: &Index32Str| -> u64 { fxhash_seed(k, 0) };
+const highwayhash: HashFn<Index32Str> = |k: &Index32Str| -> u64 { highwayhash_seed(k, 0) };
+const seahash: HashFn<Index32Str> = |k: &Index32Str| -> u64 { seahash_seed(k, 0) };
+const xxh3hash: HashFn<Index32Str> = |k: &Index32Str| -> u64 { xxh3hash_seed(k, 0) };
+const xx64hash: HashFn<Index32Str> = |k: &Index32Str| -> u64 { xx64hash_seed(k, 0) };
+
+const wyhash_seed: HashFnWithSeed<Index32Str> = |k: &Index32Str, seed: u32| -> u64 {
+    let mut hasher = WyHash::with_seed(seed.into());
     k.hash(&mut hasher);
     hasher.finish()
 };
 
-const t1ha: HashFn<Index32Str> = |k: &Index32Str| -> u64 {
-    let mut hasher = T1haHasher::with_seed(0);
+const t1ha_seed: HashFnWithSeed<Index32Str> = |k: &Index32Str, seed: u32| -> u64 {
+    let mut hasher = T1haHasher::with_seed(seed.into());
     k.hash(&mut hasher);
     hasher.finish()
 };
 
-const fxhash: HashFn<Index32Str> = |k: &Index32Str| -> u64 {
+const fxhash_seed: HashFnWithSeed<Index32Str> = |k: &Index32Str, seed: u32| -> u64 {
     let mut hasher = FxHasher64::default();
+    seed.hash(&mut hasher);
     k.hash(&mut hasher);
     hasher.finish()
 };
 
-const highwayhash: HashFn<Index32Str> = |k: &Index32Str| -> u64 {
-    let mut hasher = PortableHash::new(highway::Key([0, 0, 0, 0]));
+const highwayhash_seed: HashFnWithSeed<Index32Str> = |k: &Index32Str, seed: u32| -> u64 {
+    let mut hasher = PortableHash::new(highway::Key([seed.into(), 0, 0, 0]));
     k.hash(&mut hasher);
     hasher.finish()
 };
 
-const xxh3hash: HashFn<Index32Str> = |k: &Index32Str| -> u64 {
-    let mut hasher = Xxh3Builder::new().with_seed(0x00).build();
+const xxh3hash_seed: HashFnWithSeed<Index32Str> = |k: &Index32Str, seed: u32| -> u64 {
+    let mut hasher = Xxh3Builder::new().with_seed(seed.into()).build();
     k.hash(&mut hasher);
     hasher.finish()
 };
 
-const xx64hash: HashFn<Index32Str> = |k: &Index32Str| -> u64 {
-    let mut hasher = Xxh64Builder::new(0x00).build();
+const xx64hash_seed: HashFnWithSeed<Index32Str> = |k: &Index32Str, seed: u32| -> u64 {
+    let mut hasher = Xxh64Builder::new(seed.into()).build();
     k.hash(&mut hasher);
     hasher.finish()
 };
 
-const seahash: HashFn<Index32Str> = |k: &Index32Str| -> u64 {
-    let mut hasher = SeaHasher::with_seeds(0x00, 0x00, 0x00, 0x00);
+const seahash_seed: HashFnWithSeed<Index32Str> = |k: &Index32Str, seed: u32| -> u64 {
+    let mut hasher = SeaHasher::with_seeds(0x00, 0x00, 0x00, seed.into());
     k.hash(&mut hasher);
     hasher.finish()
 };
 
-lookup_benchmark_pa!(test, wyhash, S_16_24_24);
-lookup_benchmark_pa!(test, t1ha, S_16_24_24);
-lookup_benchmark_pa!(test, fxhash, S_16_24_24);
-lookup_benchmark_pa!(test, highwayhash, S_16_24_24);
-lookup_benchmark_pa!(test, xxh3hash, S_16_24_24);
-lookup_benchmark_pa!(test, xx64hash, S_16_24_24);
-lookup_benchmark_pa!(test, seahash, S_16_24_24);
+lookup_benchmark_pa!(wyhash, SplitD);
+lookup_benchmark_pa!(t1ha, SplitD);
+lookup_benchmark_pa!(fxhash, SplitD);
+lookup_benchmark_pa!(highwayhash, SplitD);
+lookup_benchmark_pa!(xxh3hash, SplitD);
+lookup_benchmark_pa!(xx64hash, SplitD);
+lookup_benchmark_pa!(seahash, SplitD);
 
 /*
 fn read_large_zerohashmap_postcard_bytes() -> Vec<u8> {
@@ -208,23 +283,50 @@ fn read_large_zerohashmap_postcard_bytes() -> Vec<u8> {
 */
 
 criterion_group!(
-    benches,
-    wyhash_S_16_24_24_lookup_small,
-    wyhash_S_16_24_24_lookup_large,
-    t1ha_S_16_24_24_lookup_small,
-    t1ha_S_16_24_24_lookup_large,
-    fxhash_S_16_24_24_lookup_small,
-    fxhash_S_16_24_24_lookup_large,
-    highwayhash_S_16_24_24_lookup_small,
-    highwayhash_S_16_24_24_lookup_large,
-    xxh3hash_S_16_24_24_lookup_small,
-    xxh3hash_S_16_24_24_lookup_large,
-    xx64hash_S_16_24_24_lookup_small,
-    xx64hash_S_16_24_24_lookup_large,
-    seahash_S_16_24_24_lookup_small,
-    seahash_S_16_24_24_lookup_large
+    pa_benches,
+    pa_wyhash_SplitD_lookup_small,
+    pa_wyhash_SplitD_lookup_large,
+    pa_t1ha_SplitD_lookup_small,
+    pa_t1ha_SplitD_lookup_large,
+    pa_fxhash_SplitD_lookup_small,
+    pa_fxhash_SplitD_lookup_large,
+    pa_highwayhash_SplitD_lookup_small,
+    pa_highwayhash_SplitD_lookup_large,
+    pa_xxh3hash_SplitD_lookup_small,
+    pa_xxh3hash_SplitD_lookup_large,
+    pa_xx64hash_SplitD_lookup_small,
+    pa_xx64hash_SplitD_lookup_large,
+    pa_seahash_SplitD_lookup_small,
+    pa_seahash_SplitD_lookup_large
 );
-criterion_main!(benches);
+
+lookup_benchmark_ga!(wyhash_seed);
+lookup_benchmark_ga!(t1ha_seed);
+lookup_benchmark_ga!(fxhash_seed);
+lookup_benchmark_ga!(highwayhash_seed);
+lookup_benchmark_ga!(xxh3hash_seed);
+lookup_benchmark_ga!(xx64hash_seed);
+lookup_benchmark_ga!(seahash_seed);
+
+criterion_group!(
+    ga_benches,
+    ga_wyhash_seed_lookup_small,
+    ga_wyhash_seed_lookup_large,
+    ga_t1ha_seed_lookup_small,
+    ga_t1ha_seed_lookup_large,
+    ga_fxhash_seed_lookup_small,
+    // ga_fxhash_seed_lookup_large,
+    ga_highwayhash_seed_lookup_small,
+    ga_highwayhash_seed_lookup_large,
+    ga_xxh3hash_seed_lookup_small,
+    ga_xxh3hash_seed_lookup_large,
+    ga_xx64hash_seed_lookup_small,
+    ga_xx64hash_seed_lookup_large,
+    ga_seahash_seed_lookup_small,
+    ga_seahash_seed_lookup_large
+);
+
+criterion_main!(pa_benches, ga_benches);
 
 #[zerovec::make_varule(Index32Str)]
 #[zerovec::skip_derive(ZeroMapKV)]
