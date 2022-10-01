@@ -6,6 +6,7 @@ use std::{collections::HashMap, fs};
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
+use lazy_static::lazy_static;
 use zerovec::maps::ZeroMapKV;
 use zerovec::vecs::{Index32, VarZeroSlice, VarZeroVec};
 use zerovec::ZeroMap;
@@ -28,6 +29,7 @@ const DATA: [(&str, &str); 16] = [
     ("tr", "Turkish"),
     ("zh", "Chinese"),
 ];
+
 const POSTCARD: [u8; 282] = [
     102, 16, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 4, 0, 0, 0, 7, 0, 0, 0, 10, 0, 0, 0, 12, 0, 0, 0, 14,
     0, 0, 0, 16, 0, 0, 0, 18, 0, 0, 0, 20, 0, 0, 0, 22, 0, 0, 0, 24, 0, 0, 0, 26, 0, 0, 0, 28, 0,
@@ -55,6 +57,16 @@ const POSTCARD_HASHMAP: [u8; 176] = [
     114, 97, 98, 105, 99,
 ];
 
+lazy_static! {
+    static ref LIKELY_SUBTAGS_DATA: Vec<(String, String)> = {
+        let data = fs::read_to_string("benches/testdata/likelySubtags.json").expect("Open file");
+        let json: serde_json::Value = serde_json::from_str(&data).expect("Unable to deserialize.");
+        let map = json.as_object().expect("Expected a map.");
+        map.into_iter()
+            .map(|kv| (kv.0.clone(), kv.1.as_str().unwrap().to_string()))
+            .collect()
+    };
+}
 /// Run this function to print new data to the console. Requires the optional `serde` feature.
 #[allow(dead_code)]
 fn generate() {
@@ -86,6 +98,15 @@ fn generate_test_data() {
     fs::write("large_zerohashmap.postcard", &zerohashmap_bytes).unwrap();
 }
 
+#[inline(always)]
+fn build_likely_subtags_data() -> Vec<(String, String)> {
+    let mut kv = Vec::with_capacity(2000);
+    for (key, value) in LIKELY_SUBTAGS_DATA.iter() {
+        kv.push((key.to_string(), value.to_string()));
+    }
+    kv
+}
+
 fn overview_bench(c: &mut Criterion) {
     // Uncomment the following line to re-generate the binary data.
     // generate();
@@ -94,6 +115,7 @@ fn overview_bench(c: &mut Criterion) {
     bench_deserialize_large(c);
     bench_lookup(c);
     bench_lookup_large(c);
+    bench_lookup_likely_subtags(c);
 
     bench_hashmap(c);
 
@@ -163,6 +185,21 @@ fn bench_lookup_large(c: &mut Criterion) {
     });
 }
 
+fn bench_lookup_likely_subtags(c: &mut Criterion) {
+    let kv = black_box(build_likely_subtags_data());
+    let map: ZeroMap<Index32Str, Index32Str> =
+        ZeroMap::from_iter(kv.iter().map(|kv| (indexify(&kv.0), indexify(&kv.1))));
+    c.bench_function("zeromap/lookup/likelySubtags", |b| {
+        b.iter(|| {
+            assert_eq!(
+                map.get(black_box(indexify("mn-Mong"))).map(|x| &x.0),
+                Some("mn-Mong-CN")
+            );
+            assert_eq!(map.get(black_box(indexify("zz"))).map(|x| &x.0), None);
+        });
+    });
+}
+
 fn read_large_zeromap_postcard_bytes() -> Vec<u8> {
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -179,6 +216,7 @@ fn bench_hashmap(c: &mut Criterion) {
     bench_deserialize_large_hashmap(c);
     bench_lookup_hashmap(c);
     bench_lookup_large_hashmap(c);
+    bench_lookup_likely_subtags_hashmap(c);
 }
 
 fn build_hashmap(large: bool) -> HashMap<String, String> {
@@ -231,6 +269,20 @@ fn bench_lookup_large_hashmap(c: &mut Criterion) {
     c.bench_function("zeromap/lookup/large/hashmap", |b| {
         b.iter(|| {
             assert_eq!(map.get(black_box("iu3333")), Some(&"Inuktitut".to_string()));
+            assert_eq!(map.get(black_box("zz")), None);
+        });
+    });
+}
+
+fn bench_lookup_likely_subtags_hashmap(c: &mut Criterion) {
+    let kv = black_box(build_likely_subtags_data());
+    let map: HashMap<String, String> = HashMap::from_iter(kv.into_iter());
+    c.bench_function("zeromap/lookup/likelySubtags/hashmap", |b| {
+        b.iter(|| {
+            assert_eq!(
+                map.get(black_box("mn-Mong")),
+                Some(&"mn-Mong-CN".to_string())
+            );
             assert_eq!(map.get(black_box("zz")), None);
         });
     });

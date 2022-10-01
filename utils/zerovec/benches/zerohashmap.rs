@@ -15,6 +15,7 @@ use xxhash_rust::xxh3::{xxh3_64, Xxh3Builder};
 use xxhash_rust::xxh64::Xxh64Builder;
 
 use core::hash::{Hash, Hasher};
+use lazy_static::lazy_static;
 use paste::paste;
 use wyhash::WyHash;
 use zerovec::maps::ZeroMapKV;
@@ -40,6 +41,17 @@ const DATA: [(&str, &str); 16] = [
     ("zh", "Chinese"),
 ];
 
+lazy_static! {
+    static ref LIKELY_SUBTAGS_DATA: Vec<(String, String)> = {
+        let data = fs::read_to_string("benches/testdata/likelySubtags.json").expect("Open file");
+        let json: serde_json::Value = serde_json::from_str(&data).expect("Unable to deserialize.");
+        let map = json.as_object().expect("Expected a map.");
+        map.into_iter()
+            .map(|kv| (kv.0.clone(), kv.1.as_str().unwrap().to_string()))
+            .collect()
+    };
+}
+
 /*
 /// Run this function to print new data to the console. Requires the optional `serde` feature.
 #[allow(dead_code)]
@@ -49,6 +61,15 @@ fn generate_zerohashmap() {
     println!("{:?}", buf);
 }
 */
+
+#[inline(always)]
+fn build_likely_subtags_data() -> Vec<(String, String)> {
+    let mut kv = Vec::with_capacity(2000);
+    for (key, value) in LIKELY_SUBTAGS_DATA.iter() {
+        kv.push((key.to_string(), value.to_string()));
+    }
+    kv
+}
 
 #[inline(always)]
 fn build_data(large: bool) -> Vec<(String, String)> {
@@ -115,6 +136,36 @@ macro_rules! lookup_benchmark_ga {
                     });
             }
 
+            fn [<ga_ $hash_fn _ lookup_likely_subtags>](c: &mut Criterion) {
+                let kv = black_box(build_likely_subtags_data());
+                let hm:GAZeroHashMapStatic<Index32Str,Index32Str> =
+                    GAZeroHashMapStatic::build_from_iter(
+                        kv.iter().map(|kv| (indexify(&kv.0), indexify(&kv.1))),
+                        $hash_fn
+                    );
+                for (k, v) in kv.iter() {
+                    assert_eq!(
+                        hm.get(indexify(k), $hash_fn).map(|x| &x.0),
+                        Some(v.as_ref())
+                    );
+                }
+
+                c.bench_function(concat!("zhm/lookup/likelySubtags/ga/", stringify!($hash_fn)),
+                    |b| {
+                        b.iter(|| {
+                            assert_eq!(
+                                hm.get(black_box(indexify("mn-Mong")),  $hash_fn).map(|x| &x.0),
+                                Some("mn-Mong-CN")
+                            );
+                            assert_eq!(
+                                hm.get(black_box(indexify("zz")),
+                                $hash_fn).map(|x| &x.0),
+                                None
+                            );
+                        });
+                    });
+            }
+
             fn [<ga_ $hash_fn  _lookup_large>](c: &mut Criterion) {
                 let kv = black_box(build_data(true));
                 let hm:GAZeroHashMapStatic<Index32Str,Index32Str> =
@@ -165,6 +216,32 @@ macro_rules! lookup_benchmark_pa {
                             assert_eq!(
                                 hm.get(black_box(indexify("iu")), $split_fn, $hash_fn).map(|x| &x.0),
                                 Some("Inuktitut")
+                            );
+                            assert_eq!(
+                                hm.get(black_box(indexify("zz")),
+                                $split_fn,
+                                $hash_fn).map(|x| &x.0),
+                                None
+                            );
+                        });
+                    });
+            }
+
+            fn [<pa_ $hash_fn _ $split_fn _lookup_likely_subtags>](c: &mut Criterion) {
+                let kv = black_box(build_likely_subtags_data());
+                let hm:PAZeroHashMapStatic<Index32Str,Index32Str> =
+                    PAZeroHashMapStatic::build_from_iter(
+                        kv.iter().map(|kv| (indexify(&kv.0), indexify(&kv.1))),
+                        $split_fn,
+                        $hash_fn
+                    );
+                sanity_test(&kv, &hm, $split_fn, $hash_fn);
+                c.bench_function(concat!("zhm/lookup/likelySubtags/pa/",stringify!($split_fn),"/", stringify!($hash_fn)),
+                    |b| {
+                        b.iter(|| {
+                            assert_eq!(
+                                hm.get(black_box(indexify("mn-Mong")), $split_fn, $hash_fn).map(|x| &x.0),
+                                Some("mn-Mong-CN")
                             );
                             assert_eq!(
                                 hm.get(black_box(indexify("zz")),
@@ -285,19 +362,26 @@ fn read_large_zerohashmap_postcard_bytes() -> Vec<u8> {
 criterion_group!(
     pa_benches,
     pa_wyhash_SplitD_lookup_small,
-    pa_wyhash_SplitD_lookup_large,
     pa_t1ha_SplitD_lookup_small,
-    pa_t1ha_SplitD_lookup_large,
     pa_fxhash_SplitD_lookup_small,
-    pa_fxhash_SplitD_lookup_large,
     pa_highwayhash_SplitD_lookup_small,
-    pa_highwayhash_SplitD_lookup_large,
     pa_xxh3hash_SplitD_lookup_small,
-    pa_xxh3hash_SplitD_lookup_large,
     pa_xx64hash_SplitD_lookup_small,
-    pa_xx64hash_SplitD_lookup_large,
     pa_seahash_SplitD_lookup_small,
-    pa_seahash_SplitD_lookup_large
+    pa_wyhash_SplitD_lookup_large,
+    pa_t1ha_SplitD_lookup_large,
+    pa_fxhash_SplitD_lookup_large,
+    pa_highwayhash_SplitD_lookup_large,
+    pa_xxh3hash_SplitD_lookup_large,
+    pa_xx64hash_SplitD_lookup_large,
+    pa_seahash_SplitD_lookup_large,
+    pa_wyhash_SplitD_lookup_likely_subtags,
+    pa_t1ha_SplitD_lookup_likely_subtags,
+    pa_fxhash_SplitD_lookup_likely_subtags,
+    pa_highwayhash_SplitD_lookup_likely_subtags,
+    pa_xxh3hash_SplitD_lookup_likely_subtags,
+    pa_xx64hash_SplitD_lookup_likely_subtags,
+    pa_seahash_SplitD_lookup_likely_subtags,
 );
 
 lookup_benchmark_ga!(wyhash_seed);
@@ -311,19 +395,26 @@ lookup_benchmark_ga!(seahash_seed);
 criterion_group!(
     ga_benches,
     ga_wyhash_seed_lookup_small,
-    ga_wyhash_seed_lookup_large,
     ga_t1ha_seed_lookup_small,
-    ga_t1ha_seed_lookup_large,
     ga_fxhash_seed_lookup_small,
-    // ga_fxhash_seed_lookup_large,
     ga_highwayhash_seed_lookup_small,
-    ga_highwayhash_seed_lookup_large,
     ga_xxh3hash_seed_lookup_small,
-    ga_xxh3hash_seed_lookup_large,
-    ga_xx64hash_seed_lookup_small,
-    ga_xx64hash_seed_lookup_large,
     ga_seahash_seed_lookup_small,
-    ga_seahash_seed_lookup_large
+    ga_xx64hash_seed_lookup_small,
+    ga_wyhash_seed_lookup_large,
+    ga_t1ha_seed_lookup_large,
+    // ga_fxhash_seed_lookup_large,
+    ga_highwayhash_seed_lookup_large,
+    ga_xxh3hash_seed_lookup_large,
+    ga_xx64hash_seed_lookup_large,
+    ga_seahash_seed_lookup_large,
+    ga_wyhash_seed_lookup_likely_subtags,
+    ga_t1ha_seed_lookup_likely_subtags,
+    ga_fxhash_seed_lookup_likely_subtags,
+    ga_highwayhash_seed_lookup_likely_subtags,
+    ga_xxh3hash_seed_lookup_likely_subtags,
+    ga_seahash_seed_lookup_likely_subtags,
+    ga_xx64hash_seed_lookup_likely_subtags,
 );
 
 criterion_main!(pa_benches, ga_benches);

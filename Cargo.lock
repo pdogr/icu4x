@@ -4261,6 +4261,7 @@ dependencies = [
  "highway",
  "iai",
  "icu_benchmark_macros",
+ "lazy_static",
  "paste",
  "postcard",
  "rand",

@@ -53,6 +53,7 @@ fxhash = { version = "0.2.1" }
 highway = { version = "0.8.0" }
 xxhash-rust = { version = "0.8.6", features = ["xxh3", "xxh64"]}
 seahash = { version = "4.1.0" }
+lazy_static = {version = "1.4"}
 
 [features]
 bench = []
