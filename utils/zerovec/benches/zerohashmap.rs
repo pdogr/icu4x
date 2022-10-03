@@ -95,11 +95,15 @@ fn sanity_test(
     hm: &PAZeroHashMapStatic<Index32Str, Index32Str>,
     split_fn: Split3Fn,
     hash_fn: HashFn<Index32Str>,
+    msg: &str,
 ) {
     for (k, v) in kv.iter() {
         assert_eq!(
             hm.get(indexify(k), split_fn, hash_fn).map(|x| &x.0),
-            Some(v.as_ref())
+            Some(v.as_ref()),
+            "Index: {}. Failed: {}",
+            &indexify(k).0,
+            msg
         );
     }
 }
@@ -107,6 +111,54 @@ fn sanity_test(
 macro_rules! lookup_benchmark_ga {
     ($hash_fn: ident) => {
         paste! {
+            fn [<ga_ $hash_fn _generation_small>](c: &mut Criterion) {
+                let mut group = c.benchmark_group("generation");
+                group.sample_size(10);
+                let kv = black_box(build_data(false));
+                group.bench_function(concat!("zhm/generation/small/ga/",stringify!($hash_fn)),
+                |b| {
+                    b.iter(|| {
+                    let _:GAZeroHashMapStatic<Index32Str,Index32Str> =
+                        GAZeroHashMapStatic::build_from_iter(
+                            kv.iter().map(|kv| (indexify(&kv.0), indexify(&kv.1))),
+                            $hash_fn
+                        );
+                    });
+                });
+            }
+
+            fn [<ga_ $hash_fn _ generation_large>](c: &mut Criterion) {
+                let mut group = c.benchmark_group("generation");
+                group.sample_size(10);
+                let kv = black_box(build_data(true));
+                group.bench_function(concat!("zhm/generation/large/ga/",stringify!($hash_fn)),
+                |b| {
+                    b.iter(|| {
+                    let _:GAZeroHashMapStatic<Index32Str,Index32Str> =
+                        GAZeroHashMapStatic::build_from_iter(
+                            kv.iter().map(|kv| (indexify(&kv.0), indexify(&kv.1))),
+                            $hash_fn
+                        );
+                    });
+                });
+            }
+
+            fn [<ga_ $hash_fn _ generation_likely_subtags>](c: &mut Criterion) {
+                let mut group = c.benchmark_group("generation");
+                group.sample_size(10);
+                let kv = black_box(build_likely_subtags_data());
+                group.bench_function(concat!("zhm/generation/likelySubtags/ga/", stringify!($hash_fn)),
+                |b| {
+                    b.iter(|| {
+                    let _:GAZeroHashMapStatic<Index32Str,Index32Str> =
+                        GAZeroHashMapStatic::build_from_iter(
+                            kv.iter().map(|kv| (indexify(&kv.0), indexify(&kv.1))),
+                            $hash_fn
+                        );
+                    });
+                });
+            }
+
             fn [<ga_ $hash_fn _lookup_small>](c: &mut Criterion) {
                 let kv = black_box(build_data(false));
                 let hm:GAZeroHashMapStatic<Index32Str,Index32Str> =
@@ -201,6 +253,58 @@ macro_rules! lookup_benchmark_ga {
 macro_rules! lookup_benchmark_pa {
     ($hash_fn: ident, $split_fn: ident) => {
         paste! {
+
+            fn [<pa_ $hash_fn _ $split_fn _generation_small>](c: &mut Criterion) {
+                let mut group = c.benchmark_group("generation");
+                group.sample_size(10);
+                let kv = black_box(build_data(false));
+                group.bench_function(concat!("zhm/generation/small/pa/",stringify!($split_fn),"/", stringify!($hash_fn)),
+                |b| {
+                    b.iter(|| {
+                        let _:PAZeroHashMapStatic<Index32Str,Index32Str> =
+                        PAZeroHashMapStatic::build_from_iter(
+                            kv.iter().map(|kv| (indexify(&kv.0), indexify(&kv.1))),
+                            $split_fn,
+                            $hash_fn
+                        );
+                    });
+                });
+            }
+
+            fn [<pa_ $hash_fn _ $split_fn _generation_large>](c: &mut Criterion) {
+                let mut group = c.benchmark_group("generation");
+                group.sample_size(10);
+                let kv = black_box(build_data(true));
+                group.bench_function(concat!("zhm/generation/large/pa/",stringify!($split_fn),"/", stringify!($hash_fn)),
+                |b| {
+                    b.iter(|| {
+                        let _:PAZeroHashMapStatic<Index32Str,Index32Str> =
+                        PAZeroHashMapStatic::build_from_iter(
+                            kv.iter().map(|kv| (indexify(&kv.0), indexify(&kv.1))),
+                            $split_fn,
+                            $hash_fn
+                        );
+                    });
+                });
+            }
+
+            fn [<pa_ $hash_fn _ $split_fn _generation_likely_subtags>](c: &mut Criterion) {
+                let mut group = c.benchmark_group("generation");
+                group.sample_size(10);
+                let kv = black_box(build_likely_subtags_data());
+                group.bench_function(concat!("zhm/generation/likelySubtags/pa/",stringify!($split_fn),"/", stringify!($hash_fn)),
+                |b| {
+                    b.iter(|| {
+                        let _:PAZeroHashMapStatic<Index32Str,Index32Str> =
+                        PAZeroHashMapStatic::build_from_iter(
+                            kv.iter().map(|kv| (indexify(&kv.0), indexify(&kv.1))),
+                            $split_fn,
+                            $hash_fn
+                        );
+                    });
+                });
+            }
+
             fn [<pa_ $hash_fn _ $split_fn _lookup_small>](c: &mut Criterion) {
                 let kv = black_box(build_data(false));
                 let hm:PAZeroHashMapStatic<Index32Str,Index32Str> =
@@ -209,7 +313,8 @@ macro_rules! lookup_benchmark_pa {
                         $split_fn,
                         $hash_fn
                     );
-                sanity_test(&kv, &hm, $split_fn, $hash_fn);
+                sanity_test(&kv, &hm, $split_fn, $hash_fn,
+                    concat!("zhm/lookup/small/pa/",stringify!($split_fn),"/", stringify!($hash_fn)));
                 c.bench_function(concat!("zhm/lookup/small/pa/",stringify!($split_fn),"/", stringify!($hash_fn)),
                     |b| {
                         b.iter(|| {
@@ -235,7 +340,8 @@ macro_rules! lookup_benchmark_pa {
                         $split_fn,
                         $hash_fn
                     );
-                sanity_test(&kv, &hm, $split_fn, $hash_fn);
+                sanity_test(&kv, &hm, $split_fn, $hash_fn,
+                    concat!("zhm/lookup/likelySubtags/pa/",stringify!($split_fn),"/", stringify!($hash_fn)));
                 c.bench_function(concat!("zhm/lookup/likelySubtags/pa/",stringify!($split_fn),"/", stringify!($hash_fn)),
                     |b| {
                         b.iter(|| {
@@ -261,7 +367,8 @@ macro_rules! lookup_benchmark_pa {
                         $split_fn,
                         $hash_fn
                     );
-                sanity_test(&kv, &hm, $split_fn, $hash_fn);
+                sanity_test(&kv, &hm, $split_fn, $hash_fn,
+                    concat!("zhm/lookup/large/pa/",stringify!($split_fn),"/", stringify!($hash_fn)));
                 c.bench_function(concat!("zhm/lookup/large/pa/",stringify!($split_fn),"/", stringify!($hash_fn)),
                     |b| {
                         b.iter(|| {
@@ -282,6 +389,21 @@ macro_rules! lookup_benchmark_pa {
     };
 }
 
+const SplitB: Split3Fn = |hash: u64, m: u32| {
+    (
+        ((hash >> 32) as u32 % m) as usize,
+        (hash >> 16) as u32 & 0xffff,
+        ((hash & 0xffff) as u32),
+    )
+};
+
+const SplitC: Split3Fn = |hash: u64, m: u32| {
+    (
+        ((hash >> 44) as u32 % m) as usize,
+        (hash >> 22) as u32 & 0x3fffff,
+        ((hash & 0x3fffff) as u32),
+    )
+};
 const SplitD: Split3Fn = |hash: u64, m: u32| {
     (
         ((hash >> 48) as u32 % m) as usize,
@@ -292,7 +414,7 @@ const SplitD: Split3Fn = |hash: u64, m: u32| {
 
 const wyhash: HashFn<Index32Str> = |k: &Index32Str| -> u64 { wyhash_seed(k, 0x00) };
 const t1ha: HashFn<Index32Str> = |k: &Index32Str| -> u64 { t1ha_seed(k, 0) };
-const fxhash: HashFn<Index32Str> = |k: &Index32Str| -> u64 { fxhash_seed(k, 0) };
+//const fxhash: HashFn<Index32Str> = |k: &Index32Str| -> u64 { fxhash_seed(k, 0) };
 const highwayhash: HashFn<Index32Str> = |k: &Index32Str| -> u64 { highwayhash_seed(k, 0) };
 const seahash: HashFn<Index32Str> = |k: &Index32Str| -> u64 { seahash_seed(k, 0) };
 const xxh3hash: HashFn<Index32Str> = |k: &Index32Str| -> u64 { xxh3hash_seed(k, 0) };
@@ -310,12 +432,14 @@ const t1ha_seed: HashFnWithSeed<Index32Str> = |k: &Index32Str, seed: u32| -> u64
     hasher.finish()
 };
 
+/*
 const fxhash_seed: HashFnWithSeed<Index32Str> = |k: &Index32Str, seed: u32| -> u64 {
     let mut hasher = FxHasher64::default();
     seed.hash(&mut hasher);
     k.hash(&mut hasher);
     hasher.finish()
 };
+*/
 
 const highwayhash_seed: HashFnWithSeed<Index32Str> = |k: &Index32Str, seed: u32| -> u64 {
     let mut hasher = PortableHash::new(highway::Key([seed.into(), 0, 0, 0]));
@@ -341,9 +465,22 @@ const seahash_seed: HashFnWithSeed<Index32Str> = |k: &Index32Str, seed: u32| -> 
     hasher.finish()
 };
 
+lookup_benchmark_pa!(wyhash, SplitB);
+lookup_benchmark_pa!(t1ha, SplitB);
+lookup_benchmark_pa!(highwayhash, SplitB);
+lookup_benchmark_pa!(xxh3hash, SplitB);
+lookup_benchmark_pa!(xx64hash, SplitB);
+lookup_benchmark_pa!(seahash, SplitB);
+
+lookup_benchmark_pa!(wyhash, SplitC);
+lookup_benchmark_pa!(t1ha, SplitC);
+lookup_benchmark_pa!(highwayhash, SplitC);
+lookup_benchmark_pa!(xxh3hash, SplitC);
+lookup_benchmark_pa!(xx64hash, SplitC);
+lookup_benchmark_pa!(seahash, SplitC);
+
 lookup_benchmark_pa!(wyhash, SplitD);
 lookup_benchmark_pa!(t1ha, SplitD);
-lookup_benchmark_pa!(fxhash, SplitD);
 lookup_benchmark_pa!(highwayhash, SplitD);
 lookup_benchmark_pa!(xxh3hash, SplitD);
 lookup_benchmark_pa!(xx64hash, SplitD);
@@ -360,33 +497,127 @@ fn read_large_zerohashmap_postcard_bytes() -> Vec<u8> {
 */
 
 criterion_group!(
-    pa_benches,
+    pa_benches_splitB,
+    pa_wyhash_SplitB_lookup_small,
+    pa_t1ha_SplitB_lookup_small,
+    pa_highwayhash_SplitB_lookup_small,
+    pa_xxh3hash_SplitB_lookup_small,
+    pa_xx64hash_SplitB_lookup_small,
+    pa_seahash_SplitB_lookup_small,
+    pa_wyhash_SplitB_lookup_large,
+    pa_t1ha_SplitB_lookup_large,
+    pa_highwayhash_SplitB_lookup_large,
+    pa_xxh3hash_SplitB_lookup_large,
+    pa_xx64hash_SplitB_lookup_large,
+    pa_seahash_SplitB_lookup_large,
+    pa_wyhash_SplitB_lookup_likely_subtags,
+    pa_t1ha_SplitB_lookup_likely_subtags,
+    pa_highwayhash_SplitB_lookup_likely_subtags,
+    pa_xxh3hash_SplitB_lookup_likely_subtags,
+    pa_xx64hash_SplitB_lookup_likely_subtags,
+    pa_seahash_SplitB_lookup_likely_subtags,
+    pa_wyhash_SplitB_generation_small,
+    pa_t1ha_SplitB_generation_small,
+    pa_highwayhash_SplitB_generation_small,
+    pa_xxh3hash_SplitB_generation_small,
+    pa_xx64hash_SplitB_generation_small,
+    pa_seahash_SplitB_generation_small,
+    pa_wyhash_SplitB_generation_large,
+    pa_t1ha_SplitB_generation_large,
+    pa_highwayhash_SplitB_generation_large,
+    pa_xxh3hash_SplitB_generation_large,
+    pa_xx64hash_SplitB_generation_large,
+    pa_seahash_SplitB_generation_large,
+    pa_wyhash_SplitB_generation_likely_subtags,
+    pa_t1ha_SplitB_generation_likely_subtags,
+    pa_highwayhash_SplitB_generation_likely_subtags,
+    pa_xxh3hash_SplitB_generation_likely_subtags,
+    pa_xx64hash_SplitB_generation_likely_subtags,
+    pa_seahash_SplitB_generation_likely_subtags,
+);
+
+criterion_group!(
+    pa_benches_splitC,
+    pa_wyhash_SplitC_lookup_small,
+    pa_t1ha_SplitC_lookup_small,
+    pa_highwayhash_SplitC_lookup_small,
+    pa_xxh3hash_SplitC_lookup_small,
+    pa_xx64hash_SplitC_lookup_small,
+    pa_seahash_SplitC_lookup_small,
+    pa_wyhash_SplitC_lookup_large,
+    pa_t1ha_SplitC_lookup_large,
+    pa_highwayhash_SplitC_lookup_large,
+    pa_xxh3hash_SplitC_lookup_large,
+    pa_xx64hash_SplitC_lookup_large,
+    pa_seahash_SplitC_lookup_large,
+    pa_wyhash_SplitC_lookup_likely_subtags,
+    pa_t1ha_SplitC_lookup_likely_subtags,
+    pa_highwayhash_SplitC_lookup_likely_subtags,
+    pa_xxh3hash_SplitC_lookup_likely_subtags,
+    pa_xx64hash_SplitC_lookup_likely_subtags,
+    pa_seahash_SplitC_lookup_likely_subtags,
+    pa_wyhash_SplitC_generation_small,
+    pa_t1ha_SplitC_generation_small,
+    pa_highwayhash_SplitC_generation_small,
+    pa_xxh3hash_SplitC_generation_small,
+    pa_xx64hash_SplitC_generation_small,
+    pa_seahash_SplitC_generation_small,
+    pa_wyhash_SplitC_generation_large,
+    pa_t1ha_SplitC_generation_large,
+    pa_highwayhash_SplitC_generation_large,
+    pa_xxh3hash_SplitC_generation_large,
+    pa_xx64hash_SplitC_generation_large,
+    pa_seahash_SplitC_generation_large,
+    pa_wyhash_SplitC_generation_likely_subtags,
+    pa_t1ha_SplitC_generation_likely_subtags,
+    pa_highwayhash_SplitC_generation_likely_subtags,
+    pa_xxh3hash_SplitC_generation_likely_subtags,
+    pa_xx64hash_SplitC_generation_likely_subtags,
+    pa_seahash_SplitC_generation_likely_subtags,
+);
+
+criterion_group!(
+    pa_benches_splitD,
     pa_wyhash_SplitD_lookup_small,
     pa_t1ha_SplitD_lookup_small,
-    pa_fxhash_SplitD_lookup_small,
     pa_highwayhash_SplitD_lookup_small,
     pa_xxh3hash_SplitD_lookup_small,
     pa_xx64hash_SplitD_lookup_small,
     pa_seahash_SplitD_lookup_small,
     pa_wyhash_SplitD_lookup_large,
     pa_t1ha_SplitD_lookup_large,
-    pa_fxhash_SplitD_lookup_large,
     pa_highwayhash_SplitD_lookup_large,
     pa_xxh3hash_SplitD_lookup_large,
     pa_xx64hash_SplitD_lookup_large,
     pa_seahash_SplitD_lookup_large,
     pa_wyhash_SplitD_lookup_likely_subtags,
     pa_t1ha_SplitD_lookup_likely_subtags,
-    pa_fxhash_SplitD_lookup_likely_subtags,
     pa_highwayhash_SplitD_lookup_likely_subtags,
     pa_xxh3hash_SplitD_lookup_likely_subtags,
     pa_xx64hash_SplitD_lookup_likely_subtags,
     pa_seahash_SplitD_lookup_likely_subtags,
+    pa_wyhash_SplitD_generation_small,
+    pa_t1ha_SplitD_generation_small,
+    pa_highwayhash_SplitD_generation_small,
+    pa_xxh3hash_SplitD_generation_small,
+    pa_xx64hash_SplitD_generation_small,
+    pa_seahash_SplitD_generation_small,
+    pa_wyhash_SplitD_generation_large,
+    pa_t1ha_SplitD_generation_large,
+    pa_highwayhash_SplitD_generation_large,
+    pa_xxh3hash_SplitD_generation_large,
+    pa_xx64hash_SplitD_generation_large,
+    pa_seahash_SplitD_generation_large,
+    pa_wyhash_SplitD_generation_likely_subtags,
+    pa_t1ha_SplitD_generation_likely_subtags,
+    pa_highwayhash_SplitD_generation_likely_subtags,
+    pa_xxh3hash_SplitD_generation_likely_subtags,
+    pa_xx64hash_SplitD_generation_likely_subtags,
+    pa_seahash_SplitD_generation_likely_subtags,
 );
 
 lookup_benchmark_ga!(wyhash_seed);
 lookup_benchmark_ga!(t1ha_seed);
-lookup_benchmark_ga!(fxhash_seed);
 lookup_benchmark_ga!(highwayhash_seed);
 lookup_benchmark_ga!(xxh3hash_seed);
 lookup_benchmark_ga!(xx64hash_seed);
@@ -396,28 +627,48 @@ criterion_group!(
     ga_benches,
     ga_wyhash_seed_lookup_small,
     ga_t1ha_seed_lookup_small,
-    ga_fxhash_seed_lookup_small,
     ga_highwayhash_seed_lookup_small,
     ga_xxh3hash_seed_lookup_small,
     ga_seahash_seed_lookup_small,
     ga_xx64hash_seed_lookup_small,
     ga_wyhash_seed_lookup_large,
     ga_t1ha_seed_lookup_large,
-    // ga_fxhash_seed_lookup_large,
     ga_highwayhash_seed_lookup_large,
     ga_xxh3hash_seed_lookup_large,
     ga_xx64hash_seed_lookup_large,
     ga_seahash_seed_lookup_large,
     ga_wyhash_seed_lookup_likely_subtags,
     ga_t1ha_seed_lookup_likely_subtags,
-    ga_fxhash_seed_lookup_likely_subtags,
     ga_highwayhash_seed_lookup_likely_subtags,
     ga_xxh3hash_seed_lookup_likely_subtags,
     ga_seahash_seed_lookup_likely_subtags,
     ga_xx64hash_seed_lookup_likely_subtags,
+    ga_wyhash_seed_generation_small,
+    ga_t1ha_seed_generation_small,
+    ga_highwayhash_seed_generation_small,
+    ga_xxh3hash_seed_generation_small,
+    ga_seahash_seed_generation_small,
+    ga_xx64hash_seed_generation_small,
+    ga_wyhash_seed_generation_large,
+    ga_t1ha_seed_generation_large,
+    ga_highwayhash_seed_generation_large,
+    ga_xxh3hash_seed_generation_large,
+    ga_xx64hash_seed_generation_large,
+    ga_seahash_seed_generation_large,
+    ga_wyhash_seed_generation_likely_subtags,
+    ga_t1ha_seed_generation_likely_subtags,
+    ga_highwayhash_seed_generation_likely_subtags,
+    ga_xxh3hash_seed_generation_likely_subtags,
+    ga_seahash_seed_generation_likely_subtags,
+    ga_xx64hash_seed_generation_likely_subtags,
 );
 
-criterion_main!(pa_benches, ga_benches);
+criterion_main!(
+    pa_benches_splitB,
+    pa_benches_splitC,
+    pa_benches_splitD,
+    ga_benches
+);
 
 #[zerovec::make_varule(Index32Str)]
 #[zerovec::skip_derive(ZeroMapKV)]

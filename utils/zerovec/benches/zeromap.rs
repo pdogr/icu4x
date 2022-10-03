@@ -116,6 +116,11 @@ fn overview_bench(c: &mut Criterion) {
     bench_lookup(c);
     bench_lookup_large(c);
     bench_lookup_likely_subtags(c);
+    bench_generation_small(c);
+    bench_generation_likely_subtags(c);
+    bench_generation_small_hashmap(c);
+    bench_generation_large_hashmap(c);
+    bench_generation_likely_subtags_hashmap(c);
 
     bench_hashmap(c);
 
@@ -294,6 +299,47 @@ fn read_large_hashmap_postcard_bytes() -> Vec<u8> {
         "/benches/testdata/large_hashmap.postcard"
     );
     fs::read(path).unwrap()
+}
+
+fn bench_generation_small(c: &mut Criterion) {
+    c.bench_function("zeromap/generation/small", |b| {
+        b.iter(|| {
+            let _ = black_box(build_zeromap(false));
+        });
+    });
+}
+
+fn bench_generation_likely_subtags(c: &mut Criterion) {
+    let kv = black_box(build_likely_subtags_data());
+    c.bench_function("zeromap/generation/likelySubtags", |b| {
+        b.iter(|| {
+            let _: ZeroMap<Index32Str, Index32Str> =
+                ZeroMap::from_iter(kv.iter().map(|kv| (indexify(&kv.0), indexify(&kv.1))));
+        });
+    });
+}
+fn bench_generation_small_hashmap(c: &mut Criterion) {
+    c.bench_function("zeromap/generation/small/hashmap", |b| {
+        b.iter(|| {
+            let _ = black_box(build_hashmap(false));
+        });
+    });
+}
+fn bench_generation_large_hashmap(c: &mut Criterion) {
+    c.bench_function("zeromap/generation/large/hashmap", |b| {
+        b.iter(|| {
+            let _ = black_box(build_hashmap(true));
+        });
+    });
+}
+
+fn bench_generation_likely_subtags_hashmap(c: &mut Criterion) {
+    c.bench_function("zeromap/generation/likelySubtags/hashmap", |b| {
+        b.iter(|| {
+            let kv = black_box(build_likely_subtags_data());
+            let _: HashMap<String, String> = HashMap::from_iter(kv.into_iter());
+        });
+    });
 }
 
 criterion_group!(benches, overview_bench);
