@@ -62,23 +62,6 @@ derive = ["zerovec-derive"]
 hashmap = ["dep:wyhash"]
 
 [[bench]]
-name = "zerovec"
-harness = false
-
-[[bench]]
-name = "zerovec_serde"
-harness = false
-required-features = ["serde"]
-
-[[bench]]
-name = "vzv"
-harness = false
-
-[[bench]]
-name = "zerovec_iai"
-harness = false
-
-[[bench]]
 name = "zeromap"
 harness = false
 required-features = ["serde"]
@@ -88,6 +71,3 @@ name = "zerohashmap"
 harness = false
 required-features = ["serde", "hashmap"]
 
-[[example]]
-name = "zv_serde"
-required-features = ["serde"]
