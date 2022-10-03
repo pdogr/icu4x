@@ -58,7 +58,8 @@
 //! )
 //! .expect("Failed to create DateTimeFormatter instance.");
 //!
-//! let date = DateTime::new_iso_datetime(2020, 9, 12, 12, 35, 0).expect("Failed to parse date.");
+//! let date = DateTime::try_new_iso_datetime(2020, 9, 12, 12, 35, 0)
+//!     .expect("Failed to parse date.");
 //! let date = date.to_any();
 //!
 //! let formatted_date = dtf.format(&date).expect("Formatting failed");
@@ -157,3 +158,7 @@ pub use icu_segmenter as segmenter;
 
 #[doc(inline)]
 pub use icu_timezone as timezone;
+
+#[cfg(feature = "experimental")]
+#[doc(inline)]
+pub use icu_displaynames as displaynames;

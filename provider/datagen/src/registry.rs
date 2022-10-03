@@ -21,6 +21,8 @@ use icu_timezone::provider::*;
 #[cfg(feature = "experimental")]
 use icu_casemapping::provider::*;
 #[cfg(feature = "experimental")]
+use icu_displaynames::provider::*;
+#[cfg(feature = "experimental")]
 use icu_segmenter::provider::*;
 
 macro_rules! registry {
@@ -56,6 +58,27 @@ macro_rules! registry {
                 $($marker,)+
             ]
         );
+
+        pub(crate) fn key_to_marker_bake(key: DataKey, env: &databake::CrateEnv) -> databake::TokenStream {
+            use databake::Bake;
+            // This is a bit naughty, we need the marker's type, but we're actually
+            // baking its value. This works as long as all markers are unit structs.
+            if key.path() == HelloWorldV1Marker::KEY.path() {
+                return HelloWorldV1Marker.bake(env);
+            }
+            $(
+                if key == $marker::KEY {
+                    return $marker.bake(env);
+                }
+            )+
+            $(
+                #[cfg(feature = "experimental")]
+                if key == $exp_marker::KEY {
+                    return $exp_marker.bake(env);
+                }
+            )+
+            unreachable!("unregistered marker")
+        }
     }
 }
 
@@ -189,6 +212,7 @@ registry!(
     {
         CaseMappingV1Marker,
         DateSkeletonPatternsV1Marker,
+        TerritoryDisplayNamesV1Marker,
         GraphemeClusterBreakDataV1Marker,
         LineBreakDataV1Marker,
         LstmDataV1Marker,

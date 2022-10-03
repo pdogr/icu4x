@@ -2,7 +2,7 @@
 // called LICENSE at the top level of the ICU4X source tree
 // (online at: https://github.com/unicode-org/icu4x/blob/main/LICENSE ).
 
-use crate::provider::*;
+use crate::{provider::*, LocaleTransformError};
 
 use core::mem;
 use icu_locid::subtags::{Language, Region, Script};
@@ -94,7 +94,12 @@ fn update_langid(
 
 impl LocaleExpander {
     /// A constructor which takes a [`DataProvider`] and creates a [`LocaleExpander`].
-    pub fn try_new_unstable<P>(provider: &P) -> Result<LocaleExpander, DataError>
+    ///
+    /// [📚 Help choosing a constructor](icu_provider::constructors)
+    /// <div class="stab unstable">
+    /// ⚠️ The bounds on this function may change over time, including in SemVer minor releases.
+    /// </div>
+    pub fn try_new_unstable<P>(provider: &P) -> Result<LocaleExpander, LocaleTransformError>
     where
         P: DataProvider<LikelySubtagsV1Marker> + ?Sized,
     {
@@ -104,7 +109,11 @@ impl LocaleExpander {
         Ok(LocaleExpander { likely_subtags })
     }
 
-    icu_provider::gen_any_buffer_constructors!(locale: skip, options: skip, error: DataError);
+    icu_provider::gen_any_buffer_constructors!(
+        locale: skip,
+        options: skip,
+        error: LocaleTransformError
+    );
 
     /// The maximize method potentially updates a passed in locale in place
     /// depending up the results of running the 'Add Likely Subtags' algorithm

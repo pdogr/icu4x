@@ -82,7 +82,13 @@ pub mod bidi;
 
 mod error;
 pub mod maps;
+
+// NOTE: The Pernosco debugger has special knowledge
+// of the `CanonicalCombiningClass` struct inside the `props`
+// module. Please do not change the crate-module-qualified
+// name of that struct without coordination.
 mod props;
+
 pub mod provider;
 #[allow(clippy::exhaustive_structs)] // TODO
 pub mod script;
@@ -95,3 +101,6 @@ pub use props::{
 };
 
 pub use error::PropertiesError;
+
+#[doc(inline)]
+pub use PropertiesError as Error;
