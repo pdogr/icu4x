@@ -79,3 +79,9 @@ required-features = ["serde", "hashmap"]
 [[example]]
 name = "zv_serde"
 required-features = ["serde"]
+
+[profile.release]
+debug = 1
+
+[rust]
+debuginfo-level = 1
