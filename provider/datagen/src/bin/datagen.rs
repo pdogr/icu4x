@@ -2,7 +2,7 @@
 // called LICENSE at the top level of the ICU4X source tree
 // (online at: https://github.com/unicode-org/icu4x/blob/main/LICENSE ).
 
-use clap::{crate_version, ArgGroup, Parser};
+use clap::{ArgGroup, Parser};
 use eyre::WrapErr;
 use icu_datagen::prelude::*;
 use simple_logger::SimpleLogger;
@@ -13,7 +13,6 @@ mod cli {
 
     #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
     pub(crate) enum Format {
-        #[cfg_attr(feature = "fs", value(hide = true))]
         Dir,
         Blob,
         Mod,
@@ -61,8 +60,9 @@ mod cli {
     }
 }
 #[derive(Parser)]
-#[command(name = "icu4x-datagen", author, version)]
-#[command(about = concat!("Learn more at: https://docs.rs/icu_datagen/", crate_version!()), long_about = None)]
+#[command(name = "icu4x-datagen")]
+#[command(author = "The ICU4X Project Developers", version = option_env!("CARGO_PKG_VERSION"))]
+#[command(about = format!("Learn more at: https://docs.rs/icu_datagen/{}", option_env!("CARGO_PKG_VERSION").unwrap_or("")), long_about = None)]
 #[command(group(
             ArgGroup::new("key_mode")
                 .required(true)
@@ -85,7 +85,6 @@ struct Cli {
 
     #[arg(short, long, value_enum, default_value_t = cli::Syntax::Json)]
     #[arg(help = "--format=dir only: serde serialization format.")]
-    #[cfg_attr(feature = "fs", arg(hide = true))]
     syntax: cli::Syntax,
 
     #[arg(short, long)]
@@ -100,7 +99,7 @@ struct Cli {
     #[arg(
         help = "Download CLDR JSON data from this GitHub tag (https://github.com/unicode-org/cldr-json/tags)\n\
                     Use 'latest' for the latest version verified to work with this version of the binary.\n\
-                    Ignored if '--cldr-root' is present. Requires binary to be built with `networking` feature (enabled by default).\n\
+                    Ignored if '--cldr-root' is present. Requires binary to be built with `networking` Cargo feature (enabled by default).\n\
                     Note that some keys do not support versions before 41.0.0."
     )]
     #[cfg_attr(not(feature = "networking"), arg(hide = true))]
@@ -115,9 +114,9 @@ struct Cli {
 
     #[arg(long, value_name = "TAG", default_value = "latest")]
     #[arg(
-        help = "Download Unicode Properties data from this GitHub tag (https://github.com/unicode-org/icu/tags)\n\
+        help = "Download ICU data from this GitHub tag (https://github.com/unicode-org/icu/tags)\n\
                   Use 'latest' for the latest version verified to work with this version of the binary.\n\
-                  Ignored if '--icuexport-root' is present. Requires binary to be built with `networking` feature (enabled by default).\n\
+                  Ignored if '--icuexport-root' is present. Requires binary to be built with `networking` Cargo feature (enabled by default).\n\
                   Note that some keys do not support versions before release-71-1."
     )]
     #[cfg_attr(not(feature = "networking"), arg(hide = true))]
@@ -125,10 +124,29 @@ struct Cli {
 
     #[arg(long, value_name = "PATH")]
     #[arg(
-        help = "Path to a local icuexportdata_uprops_full directory (see https://github.com/unicode-org/icu/releases).\n\
+        help = "Path to a local icuexport directory (see https://github.com/unicode-org/icu/releases).\n\
                   Note that some keys do not support versions before release-71-1."
     )]
     icuexport_root: Option<PathBuf>,
+
+    #[arg(long, value_name = "TAG")]
+    #[arg(
+        help = "Download segmentation LSTM models from this GitHub tag (https://github.com/unicode-org/lstm_word_segmentation/tags)\n\
+                  Use 'latest' for the latest version verified to work with this version of the binary.\n\
+                  Ignored if '--segmenter-lstm-root' is present. Requires binary to be built with `networking` Cargo feature (enabled by default)."
+    )]
+    #[cfg_attr(
+        not(feature = "networking"),
+        arg(hide = true, default_value = "builtin")
+    )]
+    #[cfg_attr(feature = "networking", arg(default_value = "latest"))]
+    segmenter_lstm_tag: String,
+
+    #[arg(long, value_name = "PATH")]
+    #[arg(
+        help = "Path to a local segmentation LSTM directory (see https://github.com/unicode-org/lstm_word_segmentation/releases)."
+    )]
+    segmenter_lstm_root: Option<PathBuf>,
 
     #[arg(long, value_enum, default_value_t = cli::TrieType::Small)]
     #[arg(
@@ -261,7 +279,7 @@ fn main() -> eyre::Result<()> {
         }
         #[cfg(not(feature = "networking"))]
         {
-            eyre::bail!("--cldr-root flag is mandatory unless datagen is built with the `\"networking\"` feature");
+            eyre::bail!("--cldr-root flag is mandatory unless datagen is built with the `\"networking\"` Cargo feature");
         }
     }
 
@@ -278,7 +296,24 @@ fn main() -> eyre::Result<()> {
         }
         #[cfg(not(feature = "networking"))]
         {
-            eyre::bail!("--icuexport-root flag is mandatory unless datagen is built with the `\"networking\"` feature");
+            eyre::bail!("--icuexport-root flag is mandatory unless datagen is built with the `\"networking\"` Cargo feature");
+        }
+    }
+
+    if let Some(path) = matches.segmenter_lstm_root {
+        source_data = source_data.with_segmenter_lstm(path)?;
+    } else if matches.segmenter_lstm_tag != "builtin" {
+        #[cfg(feature = "networking")]
+        {
+            let tag = match &*matches.segmenter_lstm_tag {
+                "latest" => SourceData::LATEST_TESTED_SEGMENTER_LSTM_TAG,
+                other => other,
+            };
+            source_data = source_data.with_segmenter_lstm_for_tag(tag)?;
+        }
+        #[cfg(not(feature = "networking"))]
+        {
+            eyre::bail!("Using --segmenter-lstm-tag requires the `\"networking\"` Cargo feature");
         }
     }
 
@@ -335,9 +370,6 @@ fn main() -> eyre::Result<()> {
             if v == cli::Format::DeprecatedDefault {
                 log::warn!("Defaulting to --format=dir. This will become a required parameter in the future.");
             }
-            #[cfg(not(feature = "fs"))]
-            eyre::bail!("--format=dir only available with the `fs` Cargo feature");
-            #[cfg(feature = "fs")]
             icu_datagen::Out::Fs {
                 output_path: matches
                     .output

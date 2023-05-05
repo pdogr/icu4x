@@ -7,7 +7,7 @@ pub use crate::transform::cldr::source::CoverageLevel;
 use elsa::sync::FrozenMap;
 use icu_provider::DataError;
 use std::any::Any;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::fmt::Debug;
 use std::io::Cursor;
 use std::io::Read;
@@ -23,7 +23,7 @@ use zip::ZipArchive;
 pub struct SourceData {
     cldr_paths: Option<Arc<CldrCache>>,
     icuexport_paths: Option<Arc<SerdeCache>>,
-    segmenter_paths: Arc<SerdeCache>,
+    builtin_paths: Arc<SerdeCache>,
     segmenter_lstm_paths: Arc<SerdeCache>,
     trie_type: IcuTrieType,
     collation_han_database: CollationHanDatabase,
@@ -32,17 +32,11 @@ pub struct SourceData {
 
 impl Default for SourceData {
     fn default() -> Self {
-        let segmenter_path =
-            PathBuf::from(concat!(std::env!("CARGO_MANIFEST_DIR"), "/data/segmenter"));
         Self {
             cldr_paths: None,
             icuexport_paths: None,
-            segmenter_paths: Arc::new(SerdeCache::new(
-                AbstractFs::new(&segmenter_path).expect("valid dir"),
-            )),
-            segmenter_lstm_paths: Arc::new(SerdeCache::new(
-                AbstractFs::new(segmenter_path.join("lstm")).expect("valid dir"),
-            )),
+            builtin_paths: Arc::new(SerdeCache::new(AbstractFs::new_builtin())),
+            segmenter_lstm_paths: Arc::new(SerdeCache::new(AbstractFs::new_lstm())),
             trie_type: IcuTrieType::Small,
             collation_han_database: CollationHanDatabase::Implicit,
             collations: vec![],
@@ -55,7 +49,10 @@ impl SourceData {
     pub const LATEST_TESTED_CLDR_TAG: &'static str = "43.0.0";
 
     /// The latest ICU export tag that has been verified to work with this version of `icu_datagen`.
-    pub const LATEST_TESTED_ICUEXPORT_TAG: &'static str = "release-73-1";
+    pub const LATEST_TESTED_ICUEXPORT_TAG: &'static str = "icu4x/2023-05-02/73.x";
+
+    /// The latest segmentation LSTM model tag that has been verified to work with this version of `icu_datagen`.
+    pub const LATEST_TESTED_SEGMENTER_LSTM_TAG: &'static str = "v0.1.0";
 
     /// The latest `SourceData` that has been verified to work with this version of `icu_datagen`.
     ///
@@ -69,6 +66,8 @@ impl SourceData {
             .unwrap()
             .with_icuexport_for_tag(Self::LATEST_TESTED_ICUEXPORT_TAG)
             .unwrap()
+            .with_segmenter_lstm_for_tag(Self::LATEST_TESTED_SEGMENTER_LSTM_TAG)
+            .unwrap()
     }
 
     #[cfg(test)]
@@ -78,6 +77,8 @@ impl SourceData {
             .with_cldr(repodata::paths::cldr(), Default::default())
             .unwrap()
             .with_icuexport(repodata::paths::icuexport())
+            .unwrap()
+            .with_segmenter_lstm(repodata::paths::lstm())
             .unwrap()
     }
 
@@ -104,6 +105,16 @@ impl SourceData {
     pub fn with_icuexport(self, root: PathBuf) -> Result<Self, DataError> {
         Ok(Self {
             icuexport_paths: Some(Arc::new(SerdeCache::new(AbstractFs::new(root)?))),
+            ..self
+        })
+    }
+
+    /// Adds segmenter LSTM data to this `DataSource`. The path should point to a local
+    /// `models.zip` directory or ZIP file (see [GitHub releases](
+    /// https://github.com/unicode-org/lstm_word_segmentation/releases)).
+    pub fn with_segmenter_lstm(self, root: PathBuf) -> Result<Self, DataError> {
+        Ok(Self {
+            segmenter_lstm_paths: Arc::new(SerdeCache::new(AbstractFs::new(root)?)),
             ..self
         })
     }
@@ -146,6 +157,22 @@ impl SourceData {
                     "https://github.com/unicode-org/icu/releases/download/{tag}/icuexportdata_{}.zip",
                     tag.replace('/', "-")
                 ),
+            )))),
+            ..self
+        })
+    }
+
+    /// Adds segmenter LSTM data to this `DataSource`. The data will be downloaded from GitHub
+    /// using the given tag. (see [GitHub releases](https://github.com/unicode-org/lstm_word_segmentation/releases)).
+    ///
+    /// Also see: [`LATEST_TESTED_SEGMENTER_LSTM_TAG`](Self::LATEST_TESTED_SEGMENTER_LSTM_TAG)
+    ///
+    /// Requires `networking` Cargo feature.
+    #[cfg(feature = "networking")]
+    pub fn with_segmenter_lstm_for_tag(self, tag: &str) -> Result<Self, DataError> {
+        Ok(Self {
+            segmenter_lstm_paths: Arc::new(SerdeCache::new(AbstractFs::new_from_url(format!(
+                "https://github.com/unicode-org/lstm_word_segmentation/releases/download/{tag}/models.zip"
             )))),
             ..self
         })
@@ -213,11 +240,12 @@ impl SourceData {
             .ok_or(crate::error::MISSING_ICUEXPORT_ERROR)
     }
 
-    /// Path to segmenter data.
-    pub(crate) fn segmenter(&self) -> Result<&SerdeCache, DataError> {
-        Ok(&self.segmenter_paths)
+    /// Path to built-in data.
+    pub(crate) fn builtin(&self) -> &SerdeCache {
+        &self.builtin_paths
     }
 
+    /// Path to segmenter LSTM data
     pub(crate) fn segmenter_lstm(&self) -> Result<&SerdeCache, DataError> {
         Ok(&self.segmenter_lstm_paths)
     }
@@ -329,9 +357,7 @@ impl SerdeCache {
         for<'de> S: serde::Deserialize<'de> + 'static + Send + Sync,
     {
         self.read_and_parse(path, |bytes| {
-            serde_json::from_slice(bytes)
-                .map_err(std::io::Error::from)
-                .map_err(DataError::from)
+            serde_json::from_slice(bytes).map_err(DataError::from)
         })
     }
 
@@ -356,6 +382,7 @@ impl SerdeCache {
 pub(crate) enum AbstractFs {
     Fs(PathBuf),
     Zip(RwLock<Result<ZipArchive<Cursor<Vec<u8>>>, String>>),
+    Memory(BTreeMap<&'static str, &'static [u8]>),
 }
 
 impl Debug for AbstractFs {
@@ -379,6 +406,88 @@ impl AbstractFs {
                 DataError::custom("Zip").with_display_context(&e)
             })?))))
         }
+    }
+
+    fn new_builtin() -> Self {
+        Self::Memory(
+            [
+                (
+                    "segmenter/rules/grapheme.toml",
+                    include_bytes!("../data/segmenter/rules/grapheme.toml").as_slice(),
+                ),
+                (
+                    "segmenter/rules/word.toml",
+                    include_bytes!("../data/segmenter/rules/word.toml").as_slice(),
+                ),
+                (
+                    "segmenter/rules/line.toml",
+                    include_bytes!("../data/segmenter/rules/line.toml").as_slice(),
+                ),
+                (
+                    "segmenter/rules/sentence.toml",
+                    include_bytes!("../data/segmenter/rules/sentence.toml").as_slice(),
+                ),
+                (
+                    "segmenter/dictionary/cjdict.toml",
+                    include_bytes!("../data/segmenter/dictionary/cjdict.toml").as_slice(),
+                ),
+                (
+                    "segmenter/dictionary/khmerdict.toml",
+                    include_bytes!("../data/segmenter/dictionary/khmerdict.toml").as_slice(),
+                ),
+                (
+                    "segmenter/dictionary/laodict.toml",
+                    include_bytes!("../data/segmenter/dictionary/laodict.toml").as_slice(),
+                ),
+                (
+                    "segmenter/dictionary/burmesedict.toml",
+                    include_bytes!("../data/segmenter/dictionary/burmesedict.toml").as_slice(),
+                ),
+                (
+                    "segmenter/dictionary/thaidict.toml",
+                    include_bytes!("../data/segmenter/dictionary/thaidict.toml").as_slice(),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+        )
+    }
+
+    fn new_lstm() -> Self {
+        Self::Memory(
+            [
+                (
+                    "Khmer_codepoints_exclusive_model4_heavy/weights.json",
+                    include_bytes!(
+                        "../data/lstm/Khmer_codepoints_exclusive_model4_heavy/weights.json"
+                    )
+                    .as_slice(),
+                ),
+                (
+                    "Lao_codepoints_exclusive_model4_heavy/weights.json",
+                    include_bytes!(
+                        "../data/lstm/Lao_codepoints_exclusive_model4_heavy/weights.json"
+                    )
+                    .as_slice(),
+                ),
+                (
+                    "Burmese_codepoints_exclusive_model4_heavy/weights.json",
+                    include_bytes!(
+                        "../data/lstm/Burmese_codepoints_exclusive_model4_heavy/weights.json"
+                    )
+                    .as_slice(),
+                ),
+                (
+                    "Thai_codepoints_exclusive_model4_heavy/weights.json",
+                    include_bytes!(
+                        "../data/lstm/Thai_codepoints_exclusive_model4_heavy/weights.json"
+                    )
+                    .as_slice(),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+        )
     }
 
     #[cfg(feature = "networking")]
@@ -443,6 +552,9 @@ impl AbstractFs {
                     .read_to_end(&mut buf)?;
                 Ok(buf)
             }
+            Self::Memory(map) => map.get(path).copied().map(Vec::from).ok_or_else(|| {
+                DataError::custom("Not found in icu4x-datagen's data/").with_display_context(path)
+            }),
         }
     }
 
@@ -466,6 +578,12 @@ impl AbstractFs {
                 .map(String::from)
                 .collect::<HashSet<_>>()
                 .into_iter(),
+            Self::Memory(map) => map
+                .keys()
+                .copied()
+                .map(String::from)
+                .collect::<HashSet<_>>()
+                .into_iter(),
         })
     }
 
@@ -481,6 +599,7 @@ impl AbstractFs {
                 .unwrap() // init called
                 .file_names()
                 .any(|p| p == path),
+            Self::Memory(map) => map.contains_key(path),
         })
     }
 }
