@@ -131,17 +131,17 @@ pub struct LstmDataFloat32<'data> {
     /// The embedding layer. Shape (dic.len + 1, e)
     pub(crate) embedding: LstmMatrix2<'data>,
     /// The forward layer's first matrix. Shape (h, 4, e)
-    pub(crate) fw_w: LstmMatrix3<'data>,
+    pub(crate) fw_w: LstmMatrix2<'data>,
     /// The forward layer's second matrix. Shape (h, 4, h)
-    pub(crate) fw_u: LstmMatrix3<'data>,
+    pub(crate) fw_u: LstmMatrix2<'data>,
     /// The forward layer's bias. Shape (h, 4)
-    pub(crate) fw_b: LstmMatrix2<'data>,
+    pub(crate) fw_b: LstmMatrix1<'data>,
     /// The backward layer's first matrix. Shape (h, 4, e)
-    pub(crate) bw_w: LstmMatrix3<'data>,
+    pub(crate) bw_w: LstmMatrix2<'data>,
     /// The backward layer's second matrix. Shape (h, 4, h)
-    pub(crate) bw_u: LstmMatrix3<'data>,
+    pub(crate) bw_u: LstmMatrix2<'data>,
     /// The backward layer's bias. Shape (h, 4)
-    pub(crate) bw_b: LstmMatrix2<'data>,
+    pub(crate) bw_b: LstmMatrix1<'data>,
     /// The output layer's weights. Shape (2, 4, h)
     pub(crate) time_w: LstmMatrix3<'data>,
     /// The output layer's bias. Shape (4)
@@ -155,12 +155,12 @@ impl<'data> LstmDataFloat32<'data> {
         model: ModelType,
         dic: ZeroMap<'data, UnvalidatedStr, u16>,
         embedding: LstmMatrix2<'data>,
-        fw_w: LstmMatrix3<'data>,
-        fw_u: LstmMatrix3<'data>,
-        fw_b: LstmMatrix2<'data>,
-        bw_w: LstmMatrix3<'data>,
-        bw_u: LstmMatrix3<'data>,
-        bw_b: LstmMatrix2<'data>,
+        fw_w: LstmMatrix2<'data>,
+        fw_u: LstmMatrix2<'data>,
+        fw_b: LstmMatrix1<'data>,
+        bw_w: LstmMatrix2<'data>,
+        bw_u: LstmMatrix2<'data>,
+        bw_b: LstmMatrix1<'data>,
         time_w: LstmMatrix3<'data>,
         time_b: LstmMatrix1<'data>,
     ) -> Self {
@@ -186,12 +186,12 @@ impl<'data> LstmDataFloat32<'data> {
         model: ModelType,
         dic: ZeroMap<'data, UnvalidatedStr, u16>,
         embedding: LstmMatrix2<'data>,
-        fw_w: LstmMatrix3<'data>,
-        fw_u: LstmMatrix3<'data>,
-        fw_b: LstmMatrix2<'data>,
-        bw_w: LstmMatrix3<'data>,
-        bw_u: LstmMatrix3<'data>,
-        bw_b: LstmMatrix2<'data>,
+        fw_w: LstmMatrix2<'data>,
+        fw_u: LstmMatrix2<'data>,
+        fw_b: LstmMatrix1<'data>,
+        bw_w: LstmMatrix2<'data>,
+        bw_u: LstmMatrix2<'data>,
+        bw_b: LstmMatrix1<'data>,
         time_w: LstmMatrix3<'data>,
         time_b: LstmMatrix1<'data>,
     ) -> Result<Self, DataError> {
@@ -200,14 +200,14 @@ impl<'data> LstmDataFloat32<'data> {
 
         let num_classes = embedding.dims[0];
         let embedd_dim = embedding.dims[1];
-        let hunits = fw_u.dims[2];
+        let hunits = fw_u.dims[1];
         if num_classes - 1 != dic_len
-            || fw_w.dims != [4, hunits, embedd_dim]
-            || fw_u.dims != [4, hunits, hunits]
-            || fw_b.dims != [4, hunits]
-            || bw_w.dims != [4, hunits, embedd_dim]
-            || bw_u.dims != [4, hunits, hunits]
-            || bw_b.dims != [4, hunits]
+            || fw_w.dims != [4 * hunits, embedd_dim]
+            || fw_u.dims != [4 * hunits, hunits]
+            || fw_b.dims != [4 * hunits]
+            || bw_w.dims != [4 * hunits, embedd_dim]
+            || bw_u.dims != [4 * hunits, hunits]
+            || bw_b.dims != [4 * hunits]
             || time_w.dims != [2, 4, hunits]
             || time_b.dims != [4]
         {
@@ -249,17 +249,17 @@ impl<'de: 'data, 'data> serde::Deserialize<'de> for LstmDataFloat32<'data> {
             #[cfg_attr(feature = "serde", serde(borrow))]
             embedding: LstmMatrix2<'data>,
             #[cfg_attr(feature = "serde", serde(borrow))]
-            fw_w: LstmMatrix3<'data>,
+            fw_w: LstmMatrix2<'data>,
             #[cfg_attr(feature = "serde", serde(borrow))]
-            fw_u: LstmMatrix3<'data>,
+            fw_u: LstmMatrix2<'data>,
             #[cfg_attr(feature = "serde", serde(borrow))]
-            fw_b: LstmMatrix2<'data>,
+            fw_b: LstmMatrix1<'data>,
             #[cfg_attr(feature = "serde", serde(borrow))]
-            bw_w: LstmMatrix3<'data>,
+            bw_w: LstmMatrix2<'data>,
             #[cfg_attr(feature = "serde", serde(borrow))]
-            bw_u: LstmMatrix3<'data>,
+            bw_u: LstmMatrix2<'data>,
             #[cfg_attr(feature = "serde", serde(borrow))]
-            bw_b: LstmMatrix2<'data>,
+            bw_b: LstmMatrix1<'data>,
             #[cfg_attr(feature = "serde", serde(borrow))]
             time_w: LstmMatrix3<'data>,
             #[cfg_attr(feature = "serde", serde(borrow))]

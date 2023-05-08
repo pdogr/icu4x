@@ -282,6 +282,14 @@ impl<'a> MatrixBorrowed<'a, 1> {
         debug_assert_eq!(self.dims, other.dims);
         unrolled_dot_1(self.data, other.data)
     }
+    
+    pub fn view(&'a self, r: Range<usize>) -> MatrixBorrowed<'a, 1> {
+        MatrixBorrowed {
+            #[allow(clippy::indexing_slicing)]
+            data: &self.data[r],
+            dims: self.dims,
+        }
+    }
 }
 
 impl<'a> MatrixBorrowedMut<'a, 1> {
@@ -317,18 +325,17 @@ impl<'a> MatrixBorrowedMut<'a, 1> {
             }
         }
     }
-}
 
-impl<'a> MatrixBorrowedMut<'a, 2> {
     /// Calculate the dot product of a and b, adding the result to self.
     ///
-    /// Self should be _MxN_; `a`, _O_; and `b`, _MxNxO_.
-    pub(super) fn add_dot_3d_1(&mut self, a: MatrixBorrowed<1>, b: MatrixZero<3>) {
+    /// Note: For better dot product efficiency, if `b` is MxN, then `a` should be N;
+    /// this is the opposite of standard practice.
+    pub(super) fn add_dot_2d_1(&mut self, a: MatrixZero<1>, b: MatrixZero<2>) {
         let m = a.dim();
-        let n = self.as_borrowed().dim().0 * self.as_borrowed().dim().1;
+        let n = self.as_borrowed().dim();
         debug_assert_eq!(
             m,
-            b.dim().2,
+            b.dim().1,
             "dims: {:?}/{:?}/{:?}",
             self.as_borrowed().dim(),
             a.dim(),
@@ -336,68 +343,38 @@ impl<'a> MatrixBorrowedMut<'a, 2> {
         );
         debug_assert_eq!(
             n,
-            b.dim().0 * b.dim().1,
+            b.dim().0,
             "dims: {:?}/{:?}/{:?}",
             self.as_borrowed().dim(),
             a.dim(),
             b.dim()
         );
-        // Note: The following two loops are equivalent, but the second has more opportunity for
-        // vectorization since it allows the vectorization to span submatrices.
-        // for i in 0..b.dim().0 {
-        //     self.submatrix_mut::<1>(i).add_dot_2d(a, b.submatrix(i));
-        // }
         let lhs = a.as_slice();
         for i in 0..n {
-            if let (Some(dest), Some(rhs)) = (
-                self.as_mut_slice().get_mut(i),
-                b.as_slice().get_subslice(i * m..(i + 1) * m),
-            ) {
-                *dest += unrolled_dot_1(lhs, rhs);
+            if let (Some(dest), Some(b_sub)) = (self.as_mut_slice().get_mut(i), b.submatrix::<1>(i))
+            {
+                *dest += unrolled_dot_2(lhs, b_sub.data);
             } else {
                 debug_assert!(false, "unreachable: dims checked above");
             }
         }
     }
 
-    /// Calculate the dot product of a and b, adding the result to self.
-    ///
-    /// Self should be _MxN_; `a`, _O_; and `b`, _MxNxO_.
-    pub(super) fn add_dot_3d_2(&mut self, a: MatrixZero<1>, b: MatrixZero<3>) {
-        let m = a.dim();
-        let n = self.as_borrowed().dim().0 * self.as_borrowed().dim().1;
-        debug_assert_eq!(
-            m,
-            b.dim().2,
-            "dims: {:?}/{:?}/{:?}",
-            self.as_borrowed().dim(),
-            a.dim(),
-            b.dim()
-        );
-        debug_assert_eq!(
-            n,
-            b.dim().0 * b.dim().1,
-            "dims: {:?}/{:?}/{:?}",
-            self.as_borrowed().dim(),
-            a.dim(),
-            b.dim()
-        );
-        // Note: The following two loops are equivalent, but the second has more opportunity for
-        // vectorization since it allows the vectorization to span submatrices.
-        // for i in 0..b.dim().0 {
-        //     self.submatrix_mut::<1>(i).add_dot_2d(a, b.submatrix(i));
-        // }
-        let lhs = a.as_slice();
-        for i in 0..n {
-            if let (Some(dest), Some(rhs)) = (
-                self.as_mut_slice().get_mut(i),
-                b.as_slice().get_subslice(i * m..(i + 1) * m),
-            ) {
-                *dest += unrolled_dot_2(lhs, rhs);
-            } else {
-                debug_assert!(false, "unreachable: dims checked above");
-            }
+    pub fn sigmoid(&mut self, r: Range<usize>) -> Option<()> {
+
+        let slice = self.data.get_mut(r)?;
+        for i in &mut *slice {
+            *i = 1.0 / (1.0 + (-*i).exp());
         }
+        Some(())
+    }
+
+    pub fn tanh(&mut self, r: Range<usize>) -> Option<()> {
+        let slice = self.data.get_mut(r)?;
+        for i in &mut *slice {
+            *i = (*i).tanh();
+        }
+        Some(())
     }
 }
 

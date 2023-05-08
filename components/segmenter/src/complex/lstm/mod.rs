@@ -55,12 +55,12 @@ impl Iterator for LstmSegmenterIteratorUtf16<'_> {
 pub(super) struct LstmSegmenter<'l> {
     dic: ZeroMapBorrowed<'l, UnvalidatedStr, u16>,
     embedding: MatrixZero<'l, 2>,
-    fw_w: MatrixZero<'l, 3>,
-    fw_u: MatrixZero<'l, 3>,
-    fw_b: MatrixZero<'l, 2>,
-    bw_w: MatrixZero<'l, 3>,
-    bw_u: MatrixZero<'l, 3>,
-    bw_b: MatrixZero<'l, 2>,
+    fw_w: MatrixZero<'l, 2>,
+    fw_u: MatrixZero<'l, 2>,
+    fw_b: MatrixZero<'l, 1>,
+    bw_w: MatrixZero<'l, 2>,
+    bw_u: MatrixZero<'l, 2>,
+    bw_b: MatrixZero<'l, 1>,
     timew_fw: MatrixZero<'l, 2>,
     timew_bw: MatrixZero<'l, 2>,
     time_b: MatrixZero<'l, 1>,
@@ -278,43 +278,38 @@ fn compute_hc<'a>(
     x_t: MatrixZero<'a, 1>,
     mut h_tm1: MatrixBorrowedMut<'a, 1>,
     mut c_tm1: MatrixBorrowedMut<'a, 1>,
-    w: MatrixZero<'a, 3>,
-    u: MatrixZero<'a, 3>,
-    b: MatrixZero<'a, 2>,
+    w: MatrixZero<'a, 2>,
+    u: MatrixZero<'a, 2>,
+    b: MatrixZero<'a, 1>,
 ) {
+    let hunits = h_tm1.dim();
     #[cfg(debug_assertions)]
     {
-        let hunits = h_tm1.dim();
         let embedd_dim = x_t.dim();
         c_tm1.as_borrowed().debug_assert_dims([hunits]);
-        w.debug_assert_dims([4, hunits, embedd_dim]);
-        u.debug_assert_dims([4, hunits, hunits]);
-        b.debug_assert_dims([4, hunits]);
+        w.debug_assert_dims([4 * hunits, embedd_dim]);
+        u.debug_assert_dims([4 * hunits, hunits]);
+        b.debug_assert_dims([4 * hunits]);
     }
 
     let mut s_t = b.to_owned();
 
-    s_t.as_mut().add_dot_3d_2(x_t, w);
-    s_t.as_mut().add_dot_3d_1(h_tm1.as_borrowed(), u);
+    s_t.as_mut().add_dot_2d_1(x_t, w);
+    s_t.as_mut().add_dot_2d(h_tm1.as_borrowed(), u);
 
-    #[allow(clippy::unwrap_used)] // first dimension is 4
-    s_t.submatrix_mut::<1>(0).unwrap().sigmoid_transform();
-    #[allow(clippy::unwrap_used)] // first dimension is 4
-    s_t.submatrix_mut::<1>(1).unwrap().sigmoid_transform();
-    #[allow(clippy::unwrap_used)] // first dimension is 4
-    s_t.submatrix_mut::<1>(2).unwrap().tanh_transform();
-    #[allow(clippy::unwrap_used)] // first dimension is 4
-    s_t.submatrix_mut::<1>(3).unwrap().sigmoid_transform();
+    s_t.as_mut().sigmoid(0.. 2* hunits);
+    s_t.as_mut().tanh(2 * hunits..3 * hunits);
+    s_t.as_mut().sigmoid(3 * hunits..4 * hunits);
 
-    #[allow(clippy::unwrap_used)] // first dimension is 4
+    let sb = s_t.as_borrowed();
+
     c_tm1.convolve(
-        s_t.as_borrowed().submatrix(0).unwrap(),
-        s_t.as_borrowed().submatrix(2).unwrap(),
-        s_t.as_borrowed().submatrix(1).unwrap(),
+        sb.view(0..hunits),
+        sb.view(2 * hunits..3 * hunits),
+        sb.view(hunits..2 * hunits),
     );
 
-    #[allow(clippy::unwrap_used)] // first dimension is 4
-    h_tm1.mul_tanh(s_t.as_borrowed().submatrix(3).unwrap(), c_tm1.as_borrowed());
+    h_tm1.mul_tanh(sb.view(3 * hunits..4 * hunits), c_tm1.as_borrowed());
 }
 
 #[cfg(test)]
